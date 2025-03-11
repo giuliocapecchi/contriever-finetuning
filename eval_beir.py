@@ -12,30 +12,50 @@ import json
 import numpy as np
 import os
 
-import src.slurm
+# import src.slurm
 import src.contriever
 import src.beir_utils
 import src.utils
 import src.dist_utils
 import src.contriever
+from peft import PeftModel
+
+from src import inbatch
+from src.options import Options
+
 
 logger = logging.getLogger(__name__)
 
 
 def main(args):
 
-    src.slurm.init_distributed_mode(args)
-    src.slurm.init_signal_handler()
+    # src.slurm.init_distributed_mode(args)
+    # src.slurm.init_signal_handler()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     logger = src.utils.init_logger(args)
 
-    model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
+    # model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
+    model, tokenizer, _ = src.contriever.load_retriever(model_path='facebook/contriever-msmarco')
+
+    options = Options()
+    opt = options.parse()
+    model = inbatch.InBatch(opt, model, tokenizer)
+
+
+    # load LoRA module
+    if args.lora_adapter_path is not None:
+        logger.info(f"Loading LoRA module from {args.lora_adapter_path}...")
+        model = PeftModel.from_pretrained(model, args.lora_adapter_path)
+
+
     model = model.cuda()
     model.eval()
-    query_encoder = model
-    doc_encoder = model
+    query_encoder = model.encoder
+    doc_encoder = model.encoder
+
+    logger.info("Model loaded")
 
     logger.info("Start indexing")
 
@@ -83,7 +103,9 @@ if __name__ == "__main__":
     parser.add_argument("--save_results_path", type=str, default=None, help="Path to save result object")
 
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-    parser.add_argument("--main_port", type=int, default=-1, help="Main port (for multi-node SLURM jobs)")
+    # parser.add_argument("--main_port", type=int, default=-1, help="Main port (for multi-node SLURM jobs)")
+
+    parser.add_argument("--lora_adapter_path", type=str, default=None, help="Path to LoRA module")
 
     args, _ = parser.parse_known_args()
     main(args)
