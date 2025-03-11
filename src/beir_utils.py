@@ -186,6 +186,10 @@ def evaluate_model(
                     metrics[key].append(value)
             if save_results_path is not None:
                 torch.save(results, f"{save_results_path}")
+                # save also all the metrics in a txt file
+                with open(f"{save_results_path}.txt", "w") as f:
+                    for key, value in metrics.items():
+                        f.write(f"{key}: {value}\n")
     elif dataset == "cqadupstack":  # compute macroaverage over datasets
         paths = glob.glob(data_path)
         for path in paths:
