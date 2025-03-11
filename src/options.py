@@ -2,6 +2,7 @@
 
 import argparse
 import os
+from datetime import datetime
 
 
 class Options:
@@ -11,8 +12,9 @@ class Options:
 
     def initialize(self):
         # basic parameters
+        current_time = datetime.now().strftime("%m%d-%H%M")
         self.parser.add_argument(
-            "--output_dir", type=str, default="./checkpoint/my_experiments", help="models are saved here"
+            "--output_dir", type=str, default=f"./checkpoint/experiment_{current_time}", help="models are saved here"
         )
         self.parser.add_argument(
             "--train_data",
@@ -78,7 +80,6 @@ class Options:
         self.parser.add_argument("--warmup_steps", type=int, default=-1)
 
         self.parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-        self.parser.add_argument("--main_port", type=int, default=10001, help="Master port (for multi-node SLURM jobs)")
         self.parser.add_argument("--seed", type=int, default=0, help="random seed for initialization")
         # training parameters
         self.parser.add_argument("--optim", type=str, default="adamw")
@@ -108,6 +109,13 @@ class Options:
         self.parser.add_argument("--negative_ctxs", type=int, default=1)
         self.parser.add_argument("--negative_hard_min_idx", type=int, default=0)
         self.parser.add_argument("--negative_hard_ratio", type=float, default=0.0)
+
+        # LoRA options
+        self.parser.add_argument("--lora_r", type=int, default=8)
+        self.parser.add_argument("--lora_alpha", type=float, default=32)
+        self.parser.add_argument("--lora_dropout", type=float, default=0.1)
+        self.parser.add_argument("--lora_target_modules", nargs="+", default=None)
+        
 
     def print_options(self, opt):
         message = ""

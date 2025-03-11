@@ -55,6 +55,13 @@ class InBatch(nn.Module):
 
     def get_encoder(self):
         return self.encoder
+    
+    def print_trainable_parameters(self):
+        trainable_params = [p for p in self.parameters() if p.requires_grad]
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                print(f"Parameter: {name}, Shape: {param.shape}")
+        print(f"Total trainable parameters: {len(trainable_params)}")
 
     def forward(self, q_tokens, q_mask, k_tokens, k_mask, stats_prefix="", iter_stats={}, **kwargs):
 
@@ -81,9 +88,15 @@ class InBatch(nn.Module):
 
         predicted_idx = torch.argmax(scores, dim=-1)
         accuracy = 100 * (predicted_idx == labels).float().mean()
-        stdq = torch.std(qemb, dim=0).mean().item()
-        stdk = torch.std(kemb, dim=0).mean().item()
         iter_stats[f"{stats_prefix}accuracy"] = (accuracy, bsz)
+
+        if bsz > 1:
+            stdq = torch.std(qemb, dim=0).mean().item()
+            stdk = torch.std(kemb, dim=0).mean().item()
+        else:
+            stdq = float('nan')
+            stdk = float('nan')
+
         iter_stats[f"{stats_prefix}stdq"] = (stdq, bsz)
         iter_stats[f"{stats_prefix}stdk"] = (stdk, bsz)
 

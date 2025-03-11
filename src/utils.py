@@ -7,6 +7,7 @@ import torch
 import errno
 from typing import Union, Tuple, List, Dict
 from collections import defaultdict
+import math
 
 from src import dist_utils
 
@@ -142,11 +143,15 @@ def set_optim(opt, model):
     return optimizer, scheduler
 
 
-def get_parameters(net, verbose=False):
+def get_parameters(net, using_lora=False, verbose=False):
     num_params = 0
     for param in net.parameters():
-        num_params += param.numel()
-    message = "[Network] Total number of parameters : %.6f M" % (num_params / 1e6)
+        if param.requires_grad:
+            num_params += param.numel()
+    if not using_lora:
+        message = "[Network] Total number of parameters : %.6f M" % (num_params / 1e6)
+    else:
+        message = f"[Network] Total number of parameters with LoRA : {(num_params / 1e6):.6f} M"
     return message
 
 
@@ -157,7 +162,7 @@ class WeightedAvgStats:
         self.raw_stats: Dict[str, float] = defaultdict(float)
         self.total_weights: Dict[str, float] = defaultdict(float)
 
-    def update(self, vals: Dict[str, Tuple[Number, Number]]) -> None:
+    def update(self, vals: Dict[str, Tuple[Number, Number]]) -> None: # e.g. {'loss': (0.5, 1)}
         for key, (value, weight) in vals.items():
             self.raw_stats[key] += value * weight
             self.total_weights[key] += weight
