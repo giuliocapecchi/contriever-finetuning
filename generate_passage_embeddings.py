@@ -16,7 +16,7 @@ import torch
 
 import transformers
 
-import src.slurm
+# import src.slurm
 import src.contriever
 import src.utils
 import src.data
@@ -119,6 +119,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    src.slurm.init_distributed_mode(args)
+    # src.slurm.init_distributed_mode(args)
 
     main(args)

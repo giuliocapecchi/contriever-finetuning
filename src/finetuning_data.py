@@ -3,8 +3,6 @@
 import torch
 import random
 import json
-import sys
-import numpy as np
 from src import normalize_text
 
 
@@ -39,10 +37,10 @@ class Dataset(torch.utils.data.Dataset):
 
             n_hard_negatives, n_random_negatives = self.sample_n_hard_negatives(example)
             negatives = []
-            if n_random_negatives > 0:
+            if n_random_negatives > 0: # if there are negative examples, sample them
                 random_negatives = random.sample(example["negative_ctxs"], n_random_negatives)
                 negatives += random_negatives
-            if n_hard_negatives > 0:
+            if n_hard_negatives > 0: # if there are hard negative examples, sample them
                 hard_negatives = random.sample(
                     example["hard_negative_ctxs"][self.negative_hard_min_idx :], n_hard_negatives
                 )
@@ -55,8 +53,10 @@ class Dataset(torch.utils.data.Dataset):
             else:
                 negatives = []
 
+        # gold is composed by title and text
         gold = gold["title"] + " " + gold["text"] if "title" in gold and len(gold["title"]) > 0 else gold["text"]
-
+        
+        # the same is true for negatives
         negatives = [
             n["title"] + " " + n["text"] if ("title" in n and len(n["title"]) > 0) else n["text"] for n in negatives
         ]
@@ -116,7 +116,7 @@ class Dataset(torch.utils.data.Dataset):
             n_hard_negatives = min(n_hard_negatives, len(ex["hard_negative_ctxs"][self.negative_hard_min_idx :]))
         else:
             n_hard_negatives = 0
-        n_random_negatives = self.negative_ctxs - n_hard_negatives
+        n_random_negatives = self.negative_ctxs - n_hard_negatives # this will be self.negative_ctxs if there are no hard negatives
         if "negative_ctxs" in ex:
             n_random_negatives = min(n_random_negatives, len(ex["negative_ctxs"]))
         else:
@@ -125,6 +125,17 @@ class Dataset(torch.utils.data.Dataset):
 
 
 class Collator(object):
+    """
+    A collator class that processes and tokenizes batches of query and passage data for fine-tuning.
+    Attributes:
+        tokenizer: A tokenizer object used to encode the text data.
+        passage_maxlength: An integer representing the maximum length of the passages to be tokenized.
+    Methods:
+        __call__(batch):
+            Processes a batch of data, tokenizes the queries and passages, and returns a dictionary
+            containing tokenized queries, passages, gold passages, and negative passages along with their
+            corresponding attention masks.
+    """
     def __init__(self, tokenizer, passage_maxlength=200):
         self.tokenizer = tokenizer
         self.passage_maxlength = passage_maxlength

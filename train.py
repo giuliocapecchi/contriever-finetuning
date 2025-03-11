@@ -14,7 +14,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader, RandomSampler
 
 from src.options import Options
-from src import data, beir_utils, slurm, dist_utils, utils
+from src import data, beir_utils, dist_utils, utils
 from src import moco, inbatch
 
 
@@ -133,8 +133,9 @@ if __name__ == "__main__":
     opt = options.parse()
 
     torch.manual_seed(opt.seed)
-    slurm.init_distributed_mode(opt)
-    slurm.init_signal_handler()
+    # Remove SLURM initialization
+    # slurm.init_distributed_mode(opt)
+    # slurm.init_signal_handler()
 
     directory_exists = os.path.isdir(opt.output_dir)
     if dist.is_initialized():

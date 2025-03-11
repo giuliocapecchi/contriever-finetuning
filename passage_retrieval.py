@@ -21,7 +21,7 @@ import transformers
 import src.index
 import src.contriever
 import src.utils
-import src.slurm
+# import src.slurm
 import src.data
 from src.evaluation import calculate_matches
 import src.normalize_text
@@ -245,5 +245,5 @@ if __name__ == "__main__":
     parser.add_argument("--normalize_text", action="store_true", help="normalize text")
 
     args = parser.parse_args()
-    src.slurm.init_distributed_mode(args)
+    # src.slurm.init_distributed_mode(args)
     main(args)

@@ -75,6 +75,12 @@ def get_varsize(x: torch.Tensor):
 
 
 def get_rank():
+    """
+    Returns the rank of the current process in a distributed setting.
+    
+    Returns:
+        int: The rank of the current process if the distributed package is available and initialized, otherwise 0.
+    """
     if not dist.is_available():
         return 0
     if not dist.is_initialized():
