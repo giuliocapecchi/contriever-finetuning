@@ -195,7 +195,7 @@ def prepare_dataset_with_negatives(
                 hard_negative_ctxs = [
                     {"title": "", "text": neg} 
                     for neg in hard_negatives_map[query_text] 
-                    if neg not in [pos["text"] for pos in original_entry["positive_ctxs"]]
+                    if neg not in [pos.get("title", "") + " " + pos["text"] for pos in original_entry["positive_ctxs"]]
                 ]
                 original_entry["hard_negative_ctxs"] = hard_negative_ctxs
             
@@ -219,11 +219,11 @@ if __name__ == "__main__":
         queries_file=f"{dataset_name}/queries.jsonl",
         corpus_file=f"{dataset_name}/corpus.jsonl",
         qrels_file=f"{dataset_name}/qrels/train.tsv",
-        output_file=f"{dataset_name}/training_hard_negatives.jsonl",
+        output_file=f"{dataset_name}/training_data.jsonl",
         retriever=model,
         num_negatives=20,
         num_hard_negatives=20,
-        max_examples=100,
+        max_examples=None,
         batch_size=32
     )
     
@@ -236,5 +236,5 @@ if __name__ == "__main__":
         retriever=None,  # no hard negatives for test data
         num_negatives=20,
         num_hard_negatives=0,
-        max_examples=100
+        max_examples=None
     )
