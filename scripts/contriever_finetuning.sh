@@ -29,10 +29,10 @@ DATASET=nfcorpus
 TRAIN_DATA=./$DATASET/training_data.jsonl
 EVAL_DATA=./$DATASET/test_data.jsonl
 MODEL_PATH=facebook/contriever-msmarco
-TOTAL_STEPS=250 # they used 500000
+TOTAL_STEPS=1000 # they used 500000
 SAVE_FREQ=10 # they used 20000
 LOG_FREQ=10 # they used 20000
-PER_GPU_BATCH_SIZE=32 # they used 64
+PER_GPU_BATCH_SIZE=8 # they used 64
 
 # LoRA parameters
 lora_r=8

@@ -2,7 +2,7 @@
 
 MODEL_NAME_OR_PATH=facebook/contriever-msmarco
 DATASET=nfcorpus
-LORA_ADAPTER_PATH=checkpoint/experiment_0310-1215/lora_step-0
+LORA_ADAPTER_PATH=checkpoint/experiment_0312-1849/lora_step-0
 mkdir -p ./beir_results/$DATASET
 save_results_path=./beir_results/${DATASET}/contriever_beir_results
 lora_save_results_path=./beir_results/${DATASET}/lora_beir_results
