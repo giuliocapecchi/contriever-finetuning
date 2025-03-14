@@ -126,9 +126,8 @@ class Options:
                 comment = f"\t[default: %s]" % str(default)
             message += f"{str(k):>40}: {str(v):<40}{comment}\n"
         print(message, flush=True)
-        model_dir = os.path.join(opt.output_dir, "models")
-        if not os.path.exists(model_dir):
-            os.makedirs(os.path.join(opt.output_dir, "models"))
+        if not os.path.exists(opt.output_dir):
+            os.makedirs(opt.output_dir)
         file_name = os.path.join(opt.output_dir, "opt.txt")
         with open(file_name, "wt") as opt_file:
             opt_file.write(message)
