@@ -4,6 +4,8 @@ from datasets import Dataset
 from sentence_transformers import SentenceTransformer
 from collections import defaultdict
 from sentence_transformers.util import mine_hard_negatives
+import os
+import beir.util
 
 
 def load_jsonl(file_path):
@@ -34,10 +36,10 @@ def save_jsonl(data, file_path):
             f.write(json.dumps(entry) + '\n')
 
 def prepare_dataset_with_negatives(
-    queries_file, 
-    corpus_file, 
-    qrels_file, 
+    dataset_name,
     output_file, 
+    target = "train",
+    data_path = "./",
     retriever=None,
     num_negatives=5, 
     num_hard_negatives=5, 
@@ -57,6 +59,29 @@ def prepare_dataset_with_negatives(
         max_examples: Maximum number of training examples to generate.
         batch_size: Batch size for mining hard negatives.
     """
+
+    target_path = os.path.join(data_path, dataset_name)
+    if not os.path.isdir(target_path):
+        print(f"{dataset_name} not present locally. Downloading and extracting it.")
+        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset_name)
+        data_path = beir.util.download_and_unzip(url, data_path)
+        # move the zip file to the dataset folder
+        os.rename(f"{dataset_name}.zip", os.path.join(data_path, f"{dataset_name}.zip"))
+        print(f"Downloaded and extracted {dataset_name} to {data_path}.")
+
+
+    if target == "train":
+        qrels_file = os.path.join(target_path, "qrels/train.tsv")
+    elif target == "test":
+        qrels_file = os.path.join(target_path, "qrels/test.tsv")
+    elif target == "dev":
+        qrels_file = os.path.join(target_path, "qrels/dev.tsv")
+    else:
+        print("Invalid target")
+
+    corpus_file = os.path.join(target_path, "corpus.jsonl")
+    queries_file = os.path.join(target_path, "queries.jsonl")
+
     queries = load_jsonl(queries_file)
     corpus = load_jsonl(corpus_file)
     qrels = load_tsv(qrels_file)
@@ -70,6 +95,7 @@ def prepare_dataset_with_negatives(
     # process by query to gather all positives for each query
     query_data = {}
     for qid, relevant_docs in qrels.items():
+        print(f"Processing query {qid}...")
         if qid not in queries:  # skip qrels without queries
             print(f"Query {qid} not found in the queries file.")
             continue
@@ -138,6 +164,8 @@ def prepare_dataset_with_negatives(
         }
         
         dataset_entries.append(entry)
+
+    # save_jsonl(dataset_entries, "dataset_entries.jsonl")
     
     # if a retriever is provided, we mine for the hard negatives
     # otherwise, 'dataset_entries' will be used as is
@@ -145,22 +173,25 @@ def prepare_dataset_with_negatives(
     final_data = []
     
     if retriever is not None and num_hard_negatives > 0:
-        # Prepare data for hard negative mining - we'll use the first positive for each query
-        # since mine_hard_negatives typically expects a single positive per query
-        combined_dataset = []
-        for entry in dataset_entries:
-            
-            for positive_ctx in entry["positive_ctxs"]:
-                combined_entry = {
-                    "question": entry["question"],
-                    "positive": positive_ctx.get("title", "") + " " + positive_ctx["text"]
-                }
-                combined_dataset.append(combined_entry)
-        
+        # Prepare data for hard negative mining - since mine_hard_negatives expects a single positive context per query
+        processed_dataset = []
 
+        for entry in dataset_entries:    
+            for positive_ctx in entry["positive_ctxs"]:
+                single_positive_entry = {
+                    "question": entry["question"],
+                    "positive": positive_ctx["title"] + " " + positive_ctx["text"]
+                }
+                processed_dataset.append(single_positive_entry)
+        
+        # save_jsonl(processed_dataset, "processed_dataset.jsonl")
 
         # convert to HuggingFace Dataset format
-        hf_dataset = Dataset.from_list(combined_dataset)
+        hf_dataset = Dataset.from_list(processed_dataset)
+
+        # also, it expects as corpus an object with type List[str]. We extract the text from the corpus, but removing positives from it (they're already in hf_dataset and related to a query)
+        # positives are documents that appear in the qrels file
+        corpus_texts = [doc["title"] + " " + doc["text"] for doc in corpus.values() if doc["_id"] not in qrels]
         
         # finally mine_hard_negatives
         hard_negatives_dataset = mine_hard_negatives(
@@ -168,14 +199,13 @@ def prepare_dataset_with_negatives(
             anchor_column_name="question",
             positive_column_name="positive",
             model=retriever,
-            corpus=corpus,
+            corpus=corpus_texts,
             num_negatives=num_hard_negatives,
             sampling_strategy="top",
             as_triplets=False,
             batch_size=batch_size
         )
-
-        # save_jsonl(hard_negatives_dataset, "hard_negatives.jsonl")
+        # NOTE: this way we lose the 'title' information for the hard negatives, but it's not a problem since in 'src/finetuning_data.py' this information are collapsed anyway        
         
         # Add hard negatives to original entries
         hard_negatives_map = defaultdict(set)  # query_text -> hard negatives
@@ -216,25 +246,24 @@ if __name__ == "__main__":
     
     # training data with negatives and hard negatives
     prepare_dataset_with_negatives(
-        queries_file=f"{dataset_name}/queries.jsonl",
-        corpus_file=f"{dataset_name}/corpus.jsonl",
-        qrels_file=f"{dataset_name}/qrels/train.tsv",
+        dataset_name= dataset_name,
+        target = "train",
         output_file=f"{dataset_name}/training_data.jsonl",
         retriever=model,
-        num_negatives=20,
-        num_hard_negatives=20,
-        max_examples=None,
+        num_negatives=5,
+        num_hard_negatives=5,
+        max_examples=2,
         batch_size=32
     )
     
     # test data
     prepare_dataset_with_negatives(
-        queries_file=f"{dataset_name}/queries.jsonl",
-        corpus_file=f"{dataset_name}/corpus.jsonl",
-        qrels_file=f"{dataset_name}/qrels/test.tsv",
+        dataset_name= dataset_name,
+        target = "test",
         output_file=f"{dataset_name}/test_data.jsonl",
         retriever=None,  # no hard negatives for test data
-        num_negatives=20,
+        num_negatives=5,
         num_hard_negatives=0,
-        max_examples=None
+        max_examples=2,
+        batch_size=32
     )
