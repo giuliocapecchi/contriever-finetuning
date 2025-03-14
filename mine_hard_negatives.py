@@ -46,17 +46,17 @@ def prepare_dataset_with_negatives(
     max_examples=None,
     batch_size=32
 ):
-    """Prepares training data with both random and hard negatives.
+    """Prepares a dataset with both random and hard negatives for training or testing.
     
     Args:
-        queries_file: Path to a JSONL file with queries.
-        corpus_file: Path to a JSONL file with the corpus.
-        qrels_file: Path to a TSV file with query-document relevance labels.
-        output_file: Path to save the training data.
+        dataset_name: Name of the dataset to be used.
+        output_file: Path to save the prepared dataset.
+        target: Target split of the dataset ('train', 'test', or 'dev').
+        data_path: Path to the directory containing the dataset.
         retriever: The SentenceTransformer model for mining hard negatives (optional).
         num_negatives: Number of random negative documents per query.
         num_hard_negatives: Number of hard negative documents per query.
-        max_examples: Maximum number of training examples to generate.
+        max_examples: Maximum number of examples to generate (optional).
         batch_size: Batch size for mining hard negatives.
     """
 
