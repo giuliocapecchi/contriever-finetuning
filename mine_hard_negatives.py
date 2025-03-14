@@ -252,7 +252,7 @@ if __name__ == "__main__":
         retriever=model,
         num_negatives=5,
         num_hard_negatives=5,
-        max_examples=2,
+        max_examples=None,
         batch_size=32
     )
     
@@ -264,6 +264,6 @@ if __name__ == "__main__":
         retriever=None,  # no hard negatives for test data
         num_negatives=5,
         num_hard_negatives=0,
-        max_examples=2,
+        max_examples=None,
         batch_size=32
     )
