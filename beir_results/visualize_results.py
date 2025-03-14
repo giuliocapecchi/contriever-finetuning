@@ -20,8 +20,8 @@ def load_results(filepath):
 
 def main(args):
     
-    contriever_results = load_results(f'./beir_results/{args.dataset}/contriever_beir_results.txt')
-    lora_results = load_results(f'./beir_results/{args.dataset}/lora_beir_results.txt')
+    contriever_results = load_results(f'./beir_results/{args.dataset}/{args.experiment_name}/contriever_beir_results.txt')
+    lora_results = load_results(f'./beir_results/{args.dataset}/{args.experiment_name}/lora_beir_results.txt')
 
     # extract metrics (they're the same for both models)
     metrics = contriever_results.keys()
@@ -39,7 +39,7 @@ def main(args):
             table += f"| {metric} | {contriever_metric_value:.5f} | **{lora_metric_value:.5f}** |\n"
 
     # save the table to a file
-    with open(f'./beir_results/{args.dataset}/comparison_table.md', 'w') as file:
+    with open(f'./beir_results/{args.dataset}/{args.experiment_name}//comparison_table.md', 'w') as file:
         file.write(table)
 
     logger.info("Comparison table saved successfully.")
@@ -49,6 +49,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--dataset", type=str, help="Evaluation dataset from the BEIR benchmark")
+    parser.add_argument("--experiment_name", type=str, help="Experiment name")
 
     args, _ = parser.parse_known_args()
     main(args)
