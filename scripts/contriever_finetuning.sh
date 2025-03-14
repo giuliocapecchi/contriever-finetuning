@@ -7,8 +7,8 @@
 # pooling: Type of pooling to use.
 # random_init: If set, initialize the model randomly.
 # negative_ctxs: Number of negative contexts to use.
-# negative_hard_ratio: Ratio of hard negative contexts.
-# negative_hard_min_idx: Minimum index for hard negative contexts.
+# negative_hard_ratio: Ratio of hard negative contexts (0.5 means half of the negative contexts are hard).
+# negative_hard_min_idx: Minimum index for hard negative contexts (can be useful to skip the first contexts).
 # eval_normalize_text: If set, normalize text during evaluation.
 # maxload: Maximum number of examples to load.
 # per_gpu_batch_size: Batch size per GPU.
@@ -29,13 +29,13 @@ DATASET=nfcorpus
 TRAIN_DATA=./$DATASET/training_data.jsonl
 EVAL_DATA=./$DATASET/test_data.jsonl
 MODEL_PATH=facebook/contriever-msmarco
-TOTAL_STEPS=1000 # they used 500000
+TOTAL_STEPS=10000 # they used 500000
 SAVE_FREQ=10 # they used 20000
 LOG_FREQ=10 # they used 20000
-PER_GPU_BATCH_SIZE=8 # they used 64
+PER_GPU_BATCH_SIZE=32 # they used 64
 
 # LoRA parameters
-lora_r=8
+lora_r=64
 lora_alpha=32
 lora_dropout=0.1
 lora_target_modules="query,key,value,output.dense,intermediate.dense"
@@ -56,4 +56,7 @@ python ./finetuning.py \
     --save_freq $SAVE_FREQ \
     --log_freq $LOG_FREQ \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
-    --name $name
+    --name $name \
+    --negative_ctxs 5 \
+    --negative_hard_ratio 0.5 \
+    --negative_hard_min_idx 0
