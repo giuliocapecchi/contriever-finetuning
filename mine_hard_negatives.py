@@ -95,7 +95,6 @@ def prepare_dataset_with_negatives(
     # process by query to gather all positives for each query
     query_data = {}
     for qid, relevant_docs in qrels.items():
-        print(f"Processing query {qid}...")
         if qid not in queries:  # skip qrels without queries
             print(f"Query {qid} not found in the queries file.")
             continue
