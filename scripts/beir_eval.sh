@@ -1,12 +1,17 @@
 #!/bin/bash
 
+# MODEL_NAME_OR_PATH: Model name or path to the model.
+# DATASET: Dataset to evaluate.
+# EXPERIMENT_NAME: Name of the experiment.
+# LORA_MODEL_AT_STEP: Step of the LoRA model to evaluate.
+
 MODEL_NAME_OR_PATH=facebook/contriever-msmarco
 DATASET=nfcorpus
 EXPERIMENT_NAME=experiment_0314-1053
 LORA_MODEL_AT_STEP=lora_step-0
-LORA_ADAPTER_PATH=checkpoint/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
 
-save_results_path=./beir_results/${DATASET}/${EXPERIMENT_NAME}/contriever_beir_results
+LORA_ADAPTER_PATH=checkpoint/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
+save_results_path=./beir_results/${DATASET}/contriever_beir_results
 lora_save_results_path=./beir_results/${DATASET}/${EXPERIMENT_NAME}/lora_beir_results
 
 mkdir -p ./beir_results/$DATASET/$EXPERIMENT_NAME

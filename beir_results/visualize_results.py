@@ -20,7 +20,7 @@ def load_results(filepath):
 
 def main(args):
     
-    contriever_results = load_results(f'./beir_results/{args.dataset}/{args.experiment_name}/contriever_beir_results.txt')
+    contriever_results = load_results(f'./beir_results/{args.dataset}/contriever_beir_results.txt')
     lora_results = load_results(f'./beir_results/{args.dataset}/{args.experiment_name}/lora_beir_results.txt')
 
     # extract metrics (they're the same for both models)
