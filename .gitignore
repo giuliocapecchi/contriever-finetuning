@@ -173,6 +173,7 @@ cython_debug/
 scifact*
 scidocs*
 nfcorpus*
+fiqa*
 checkpoint
 
 train.jsonl
