@@ -163,8 +163,6 @@ def prepare_dataset_with_negatives(
         }
         
         dataset_entries.append(entry)
-
-    # save_jsonl(dataset_entries, "dataset_entries.jsonl")
     
     # if a retriever is provided, we mine for the hard negatives
     # otherwise, 'dataset_entries' will be used as is
@@ -183,15 +181,16 @@ def prepare_dataset_with_negatives(
                 }
                 processed_dataset.append(single_positive_entry)
         
-        # save_jsonl(processed_dataset, "processed_dataset.jsonl")
-
         # convert to HuggingFace Dataset format
         hf_dataset = Dataset.from_list(processed_dataset)
 
         # also, it expects as corpus an object with type List[str]. We extract the text from the corpus, but removing positives from it (they're already in hf_dataset and related to a query)
         # positives are documents that appear in the qrels file
-        corpus_texts = [doc["title"] + " " + doc["text"] for doc in corpus.values() if doc["_id"] not in qrels]
-        
+
+        positive_doc_ids = set(doc_id for rel_docs in qrels.values() for doc_id in rel_docs.keys())
+        corpus_texts = [doc["title"] + " " + doc["text"] for doc in corpus.values() if doc["_id"] not in positive_doc_ids]
+        print(f"Initial corpus size: {len(corpus)} documents\nReducing it to {len(corpus_texts)} documents by removing {len(positive_doc_ids)} positives")
+
         # finally mine_hard_negatives
         hard_negatives_dataset = mine_hard_negatives(
             dataset=hf_dataset,
@@ -241,7 +240,9 @@ if __name__ == "__main__":
     # Load the SentenceTransformer model -> https://huggingface.co/nishimoto/contriever-sentencetransformer
     model = SentenceTransformer("nishimoto/contriever-sentencetransformer")
 
-    dataset_name = "nfcorpus"
+    dataset_name = "scifact"
+    num_negatives = 3
+    num_hard_negatives = 3
     
     # training data with negatives and hard negatives
     prepare_dataset_with_negatives(
@@ -249,8 +250,8 @@ if __name__ == "__main__":
         target = "train",
         output_file=f"{dataset_name}/training_data.jsonl",
         retriever=model,
-        num_negatives=5,
-        num_hard_negatives=5,
+        num_negatives=num_negatives,
+        num_hard_negatives=num_hard_negatives,
         max_examples=None,
         batch_size=32
     )
@@ -261,7 +262,7 @@ if __name__ == "__main__":
         target = "test",
         output_file=f"{dataset_name}/test_data.jsonl",
         retriever=None,  # no hard negatives for test data
-        num_negatives=5,
+        num_negatives=num_negatives,
         num_hard_negatives=0,
         max_examples=None,
         batch_size=32
