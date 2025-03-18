@@ -25,14 +25,17 @@
 # seed: Seed for reproducibility.
 # chunk_length: Maximum length of passages.
 
-DATASET=nfcorpus
-TRAIN_DATA=./$DATASET/training_data.jsonl
-EVAL_DATA=./$DATASET/test_data.jsonl
+DATASET=INSERT_DATASET_NAME_HERE
+TRAIN_DATA=./beir_datasets/$DATASET/training_data.jsonl
+EVAL_DATA=./beir_datasets/$DATASET/test_data.jsonl
 MODEL_PATH=facebook/contriever-msmarco
-TOTAL_STEPS=10000 # they used 500000
+TOTAL_STEPS=5000 # they used 500000
 SAVE_FREQ=10 # they used 20000
 LOG_FREQ=10 # they used 20000
+EVAL_FREQ=500
 PER_GPU_BATCH_SIZE=32 # they used 64
+USE_RSLORA=True
+INIT_LORA_WEIGHTS=pissa
 
 # LoRA parameters
 lora_r=64
@@ -52,11 +55,14 @@ python ./finetuning.py \
     --lora_alpha $lora_alpha \
     --lora_dropout $lora_dropout \
     --lora_target_modules $lora_target_modules \
+    --use_rslora $USE_RSLORA \
+    --init_lora_weights $INIT_LORA_WEIGHTS \
     --total_steps $TOTAL_STEPS \
     --save_freq $SAVE_FREQ \
     --log_freq $LOG_FREQ \
+    --eval_freq $EVAL_FREQ \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
     --name $name \
     --negative_ctxs 5 \
-    --negative_hard_ratio 0.5 \
+    --negative_hard_ratio 0.8 \
     --negative_hard_min_idx 0

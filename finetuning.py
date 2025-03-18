@@ -35,8 +35,11 @@ def apply_lora(model, opt):
         task_type=TaskType.FEATURE_EXTRACTION,
         r=opt.lora_r,
         lora_alpha=opt.lora_alpha,
+        use_rslora= True if opt.use_rslora == "True" else False,
         lora_dropout=opt.lora_dropout,
-        target_modules=target_modules
+        init_lora_weights=opt.init_lora_weights,
+        target_modules=target_modules,
+        
     )
     try:
         model = get_peft_model(model, lora_config)
@@ -47,10 +50,13 @@ def apply_lora(model, opt):
             logger.error(f"{name}")
     return model
 
-def save_lora_model(model, output_dir, step):
+def save_lora_model(model, output_dir, step=None):
     if hasattr(model, "module"):
         model = model.module
-    model.save_pretrained(f"{output_dir}/lora_step-{step}") # since model was wrapped with PEFT's LoRA, this should save only the LoRA weights and config
+    if step:
+        model.save_pretrained(f"{output_dir}/lora_step-{step}") # since model was wrapped with PEFT's LoRA, this should save only the LoRA weights and config
+    else: # final model
+        model.save_pretrained(f"{output_dir}/final_lora_model")
 
 
 def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
@@ -72,7 +78,6 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         datapaths=opt.train_data,
         negative_ctxs=opt.negative_ctxs,
         training=True,
-        # the following are unused
         negative_hard_ratio=opt.negative_hard_ratio,
         negative_hard_min_idx=opt.negative_hard_min_idx, 
         global_rank=dist_utils.get_rank(),
@@ -308,7 +313,7 @@ def main():
 
     # save the final model
     if dist_utils.get_rank() == 0:
-        save_lora_model(model, opt.output_dir, step)
+        save_lora_model(model, opt.output_dir)
 
 
 if __name__ == "__main__":

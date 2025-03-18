@@ -112,8 +112,10 @@ class Options:
 
         # LoRA options
         self.parser.add_argument("--lora_r", type=int, default=8)
+        self.parser.add_argument("--use_rslora", type=str, default="none")
         self.parser.add_argument("--lora_alpha", type=float, default=32)
-        self.parser.add_argument("--lora_dropout", type=float, default=0.1)
+        self.parser.add_argument("--lora_dropout", type=float, default=0.1, help="dropout for LoRA")
+        self.parser.add_argument("--init_lora_weights", type=str, default="none", help="Choose between 'gaussian', 'eva', 'olora', 'pissa', 'pissa_niter_[number of iters]', 'loftq'")
         self.parser.add_argument("--lora_target_modules", nargs="+", default=None)
         
 
