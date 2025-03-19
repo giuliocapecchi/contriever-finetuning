@@ -6,6 +6,7 @@ from collections import defaultdict
 from sentence_transformers.util import mine_hard_negatives
 import os
 import beir.util
+import argparse
 
 
 def load_jsonl(file_path):
@@ -39,12 +40,19 @@ def prepare_dataset_with_negatives(
     dataset_name,
     output_file, 
     target = "train",
-    data_path = "./",
-    retriever=None,
+    data_path = "./beir_datasets",
     num_negatives=5, 
-    num_hard_negatives=5, 
-    max_examples=None,
-    batch_size=32
+    # hard negatives parameters
+    retriever=None,
+    num_hard_negatives=5,
+    range_min=10,                
+    range_max=30,               
+    max_score=0.8,              
+    min_score=None,             
+    margin=0.1,                
+    sampling_strategy="top", 
+    batch_size=32,
+    max_examples=None
 ):
     """Prepares a dataset with both random and hard negatives for training or testing.
     
@@ -53,11 +61,17 @@ def prepare_dataset_with_negatives(
         output_file: Path to save the prepared dataset.
         target: Target split of the dataset ('train', 'test', or 'dev').
         data_path: Path to the directory containing the dataset.
-        retriever: The SentenceTransformer model for mining hard negatives (optional).
         num_negatives: Number of random negative documents per query.
+        retriever: The SentenceTransformer model for mining hard negatives (optional).
         num_hard_negatives: Number of hard negative documents per query.
-        max_examples: Maximum number of examples to generate (optional).
+        range_min: Excludes the top 'range_min' most similar candidates. Useful to skip the most similar texts to avoid marking texts as negative that are actually positive
+        range_max: Maximum rank of the closest matches to consider as negatives: useful to limit the number of candidates to sample negatives from. 
+        max_score: Allow negatives with a similarity score up to this value. Useful to skip candidates that are too similar to the anchor.
+        min_score: Exclude further negatives. Useful to skip candidates that are too dissimilar to the anchor. (optional)
+        margin: Useful to skip candidates negatives whose similarity to the anchor is within a certain margin of the positive pair. A value of 0 can be used to enforce that the negative is always further away from the anchor than the positive.
+        sampling_strategy: 'top' will sample the hardest negatives, 'random' will sample randomly
         batch_size: Batch size for mining hard negatives.
+        max_examples: Maximum number of examples to generate (optional).
     """
 
     target_path = os.path.join(data_path, dataset_name)
@@ -65,8 +79,8 @@ def prepare_dataset_with_negatives(
         print(f"{dataset_name} not present locally. Downloading and extracting it.")
         url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset_name)
         data_path = beir.util.download_and_unzip(url, data_path)
-        # move the zip file to the dataset folder
-        os.rename(f"{dataset_name}.zip", os.path.join(data_path, f"{dataset_name}.zip"))
+        # delete the zip file
+        os.remove(data_path + ".zip")
         print(f"Downloaded and extracted {dataset_name} to {data_path}.")
 
 
@@ -199,7 +213,12 @@ def prepare_dataset_with_negatives(
             model=retriever,
             corpus=corpus_texts,
             num_negatives=num_hard_negatives,
-            sampling_strategy="top",
+            range_min=range_min,
+            range_max=range_max,
+            max_score=max_score,
+            min_score=min_score,
+            margin=margin,
+            sampling_strategy=sampling_strategy,
             as_triplets=False,
             batch_size=batch_size
         )
@@ -234,36 +253,64 @@ def prepare_dataset_with_negatives(
     
     save_jsonl(final_data, output_file)
     print(f"Saved {len(final_data)} examples to {output_file}.")
-    
 
-if __name__ == "__main__":
-    # Load the SentenceTransformer model -> https://huggingface.co/nishimoto/contriever-sentencetransformer
-    model = SentenceTransformer("nishimoto/contriever-sentencetransformer")
 
-    dataset_name = "scifact"
-    num_negatives = 3
-    num_hard_negatives = 3
-    
+def main(args):
+
+    model = SentenceTransformer(args.model_name)
+
     # training data with negatives and hard negatives
     prepare_dataset_with_negatives(
-        dataset_name= dataset_name,
+        dataset_name= args.dataset_name,
         target = "train",
-        output_file=f"{dataset_name}/training_data.jsonl",
+        output_file=f"beir_datasets/{args.dataset_name}/training_data.jsonl",
         retriever=model,
-        num_negatives=num_negatives,
-        num_hard_negatives=num_hard_negatives,
-        max_examples=None,
-        batch_size=32
+        num_negatives=args.num_negatives,
+        num_hard_negatives=args.num_hard_negatives,
+        range_min=args.range_min,
+        range_max=args.range_max,
+        max_score=args.max_score,
+        min_score=args.min_score,
+        margin=args.margin,
+        sampling_strategy=args.sampling_strategy,
+        batch_size=args.batch_size,
+        max_examples=args.max_examples
     )
     
     # test data
     prepare_dataset_with_negatives(
-        dataset_name= dataset_name,
+        dataset_name= args.dataset_name,
         target = "test",
-        output_file=f"{dataset_name}/test_data.jsonl",
+        output_file=f"beir_datasets/{args.dataset_name}/test_data.jsonl",
         retriever=None,  # no hard negatives for test data
-        num_negatives=num_negatives,
+        num_negatives=args.num_negatives,
         num_hard_negatives=0,
         max_examples=None,
-        batch_size=32
+        batch_size=None
     )
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # Load the SentenceTransformer model -> https://huggingface.co/nishimoto/contriever-sentencetransformer
+    parser.add_argument("--model_name", type=str, help="SentenceTransformer model name", default="nishimoto/contriever-sentencetransformer")
+    parser.add_argument("--dataset_name", type=str, help="Evaluation dataset from the BEIR benchmark")
+    parser.add_argument("--num_negatives", type=int, help="Number of random negative documents per query", default=5)
+    # hard negatives parameters
+    parser.add_argument("--num_hard_negatives", type=int, help="Number of hard negative documents per query", default=5)
+    parser.add_argument("--range_min", type=int, help="Excludes the top 'range_min' most similar candidates", default=1)
+    parser.add_argument("--range_max", type=int, help="Maximum rank of the closest matches to consider as negatives", default=30)
+    parser.add_argument("--max_score", type=float, help="Allow negatives with a similarity score up to this value", default=0.8)
+    parser.add_argument("--min_score", type=float, help="Exclude further negatives", default=None)
+    parser.add_argument("--margin", type=float, help="Useful to skip candidates negatives whose similarity to the anchor is within a certain margin of the positive pair", default=0.1)
+    parser.add_argument("--sampling_strategy", type=str, help="'top' will sample the hardest negatives, 'random' will sample randomly", default="top")
+    parser.add_argument("--batch_size", type=int, help="Batch size for mining hard negatives", default=32)
+    parser.add_argument("--max_examples", type=int, help="Maximum number of examples to generate", default=None)
+
+    args, _ = parser.parse_known_args()
+
+    # print the arguments
+    print("Arguments provided: ",args)
+
+
+    main(args)
