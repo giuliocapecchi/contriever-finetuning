@@ -32,8 +32,6 @@ def main(args):
     # src.slurm.init_distributed_mode(args)
     # src.slurm.init_signal_handler()
 
-    os.makedirs(args.output_dir, exist_ok=True)
-
     logger = src.utils.init_logger(args)
 
     # model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
@@ -100,7 +98,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--normalize_text", action="store_true", help="Apply function to normalize some common characters"
     )
-    parser.add_argument("--save_results_path", type=str, default=None, help="Path to save result object")
+    parser.add_argument("--save_results_path", type=str, default=None, help="Path to save the results of the evaluation (in a txt file)")
 
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     # parser.add_argument("--main_port", type=int, default=-1, help="Main port (for multi-node SLURM jobs)")

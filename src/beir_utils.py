@@ -136,6 +136,7 @@ def evaluate_model(
     score_function="dot",
     beir_dir="BEIR/datasets",
     save_results_path=None,
+    save_torch_results=None,
     lower_case=False,
     normalize_text=False,
 ):
@@ -185,9 +186,10 @@ def evaluate_model(
                 for key, value in metric.items():
                     metrics[key].append(value)
             if save_results_path is not None:
-                torch.save(results, f"{save_results_path}")
+                if save_torch_results is not None:
+                    torch.save(results, f"{save_results_path}/results.pt")
                 # save also all the metrics in a txt file
-                with open(f"{save_results_path}.txt", "w") as f:
+                with open(f"{save_results_path}/metrics.txt", "w") as f:
                     for key, value in metrics.items():
                         f.write(f"{key}: {value}\n")
     elif dataset == "cqadupstack":  # compute macroaverage over datasets

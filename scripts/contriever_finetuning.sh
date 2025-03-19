@@ -37,15 +37,16 @@ PER_GPU_BATCH_SIZE=32 # they used 64
 USE_RSLORA=True
 INIT_LORA_WEIGHTS=pissa
 
+# Output directory
+OUTPUT_DIR=beir_results/$DATASET/experiment_$(date +%m%d-%H%M)
+
 # LoRA parameters
 lora_r=64
 lora_alpha=32
 lora_dropout=0.1
 lora_target_modules="query,key,value,output.dense,intermediate.dense"
 
-name="finetuning-experiment"
-
-echo "Running experiment $name"
+echo "Running experiment. Results will be saved inside $OUTPUT_DIR"
 
 python ./finetuning.py \
     --model_path $MODEL_PATH \
@@ -62,7 +63,7 @@ python ./finetuning.py \
     --log_freq $LOG_FREQ \
     --eval_freq $EVAL_FREQ \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
-    --name $name \
+    --output_dir $OUTPUT_DIR \
     --negative_ctxs 5 \
     --negative_hard_ratio 0.8 \
     --negative_hard_min_idx 0

@@ -2,7 +2,6 @@
 
 import argparse
 import os
-from datetime import datetime
 
 
 class Options:
@@ -12,9 +11,8 @@ class Options:
 
     def initialize(self):
         # basic parameters
-        current_time = datetime.now().strftime("%m%d-%H%M")
         self.parser.add_argument(
-            "--output_dir", type=str, default=f"./checkpoint/experiment_{current_time}", help="models are saved here"
+            "--output_dir", type=str, default="./checkpoint/my_experiment", help="LoRA modules are saved here"
         )
         self.parser.add_argument(
             "--train_data",

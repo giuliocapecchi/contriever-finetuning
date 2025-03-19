@@ -6,26 +6,25 @@
 # LORA_MODEL_AT_STEP: Step of the LoRA model to evaluate.
 
 MODEL_NAME_OR_PATH=facebook/contriever-msmarco
-DATASET=nfcorpus
-EXPERIMENT_NAME=experiment_0314-1053
-LORA_MODEL_AT_STEP=lora_step-0
+DATASET=DATASET_NAME_HERE
+EXPERIMENT_NAME=EXPERIMENT_NAME_HERE
+LORA_MODEL_AT_STEP=INSERT_LORA_MODEL_STEP_HERE
 
-LORA_ADAPTER_PATH=checkpoint/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
-save_results_path=./beir_results/${DATASET}/contriever_beir_results
-lora_save_results_path=./beir_results/${DATASET}/${EXPERIMENT_NAME}/lora_beir_results
+LORA_ADAPTER_PATH=beir_results/${DATASET}/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
+save_results_path=./beir_results/${DATASET}/contriever-beir-results/
+lora_save_results_path=./beir_results/${DATASET}/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
 
-mkdir -p ./beir_results/$DATASET/$EXPERIMENT_NAME
-
+mkdir -p ./beir_results/${DATASET}/contriever-beir-results/
 
 echo "Evaluating without LoRA"
-if [[ ! -f "${save_results_path}" && ! -f "${save_results_path}.txt" ]]; then # if the base-model evaluation has already been performed, skip this step (results won't change for the base-model)
-    python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --save_results_path $save_results_path
+if [[ ! -d "${save_results_path}" ]]; then # if the base-model evaluation folder does not exist, perform the evaluation
+    python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --save_results_path $save_results_path --output_dir $save_results_path
 else
     echo "Base model evaluation already performed and saved in ${save_results_path}.txt"
 fi
 
 echo "Evaluating with LoRA"
-python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --lora_adapter_path $LORA_ADAPTER_PATH --save_results_path $lora_save_results_path
+python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --lora_adapter_path $LORA_ADAPTER_PATH --save_results_path $lora_save_results_path --output_dir $lora_save_results_path
 
 echo "Creating table with results for $DATASET"
-python ./beir_results/visualize_results.py --dataset $DATASET --experiment_name $EXPERIMENT_NAME
+python ./beir_results/visualize_results.py --dataset $DATASET --experiment_name $EXPERIMENT_NAME --lora_model_at_step $LORA_MODEL_AT_STEP
