@@ -43,9 +43,23 @@ def main(args):
 
 
     # load LoRA module
-    if args.lora_adapter_path is not None:
+    if args.lora_adapter_path is not None and args.finetuned_basemodel_checkpoint is None:
+        if not os.path.exists(args.lora_adapter_path):
+            raise FileNotFoundError(f"LoRA adapter path '{args.lora_adapter_path}' not found.")
         logger.info(f"Loading LoRA module from {args.lora_adapter_path}...")
         model = PeftModel.from_pretrained(model, args.lora_adapter_path)
+    # load finetuned base-model
+    elif args.finetuned_basemodel_checkpoint is not None and args.lora_adapter_path is None:
+        checkpoint_path = os.path.join(args.finetuned_basemodel_checkpoint, "checkpoint.pth")
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Base model checkpoint path '{checkpoint_path}' not found")
+        logger.info(f"Loading finetuned base-model from {checkpoint_path}...")
+        # load weights
+        checkpoint = torch.load(checkpoint_path, map_location="cuda" if torch.cuda.is_available() else "cpu", weights_only=False)
+        model.load_state_dict(checkpoint["model"])
+        logger.info("Model loaded successfully")
+    else:
+        raise ValueError("Either LoRA adapter path or finetuned base-model checkpoint must be provided.")
 
 
     model = model.cuda()
@@ -104,6 +118,7 @@ if __name__ == "__main__":
     # parser.add_argument("--main_port", type=int, default=-1, help="Main port (for multi-node SLURM jobs)")
 
     parser.add_argument("--lora_adapter_path", type=str, default=None, help="Path to LoRA module")
+    parser.add_argument("--finetuned_basemodel_checkpoint", type=str, default=None, help="Path to base model checkpoint")
 
     args, _ = parser.parse_known_args()
     main(args)

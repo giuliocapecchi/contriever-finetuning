@@ -109,6 +109,7 @@ class Options:
         self.parser.add_argument("--negative_hard_ratio", type=float, default=0.0)
 
         # LoRA options
+        self.parser.add_argument("--use_lora", action="store_true", help="Whether to use LoRA or the base model.")
         self.parser.add_argument("--lora_r", type=int, default=8)
         self.parser.add_argument("--use_rslora", type=str, default="none")
         self.parser.add_argument("--lora_alpha", type=float, default=32)

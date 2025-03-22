@@ -18,12 +18,15 @@
 # eval_freq: Evaluation frequency.
 # save_freq: Model saving frequency.
 # dropout: Dropout rate.
-# lora_r: r parameter for LoRA.
-# lora_alpha: alpha parameter for LoRA.
-# lora_dropout: Dropout rate for LoRA.
 # optim: Type of optimizer (e.g., adam, sam, asam).
 # seed: Seed for reproducibility.
 # chunk_length: Maximum length of passages.
+# lora_r: r parameter for LoRA.
+# lora_alpha: alpha parameter for LoRA.
+# lora_dropout: Dropout rate for LoRA.
+# lora_target_modules: Target modules for LoRA.
+# use_rslora: Whether to use RSLORA.
+# init_lora_weights: Initial weights for LoRA.
 
 DATASET=INSERT_DATASET_NAME_HERE
 TRAIN_DATA=./beir_datasets/$DATASET/training_data.jsonl
@@ -34,36 +37,65 @@ SAVE_FREQ=10 # they used 20000
 LOG_FREQ=10 # they used 20000
 EVAL_FREQ=500
 PER_GPU_BATCH_SIZE=32 # they used 64
-USE_RSLORA=True
-INIT_LORA_WEIGHTS=pissa
+NEGATIVE_CTXS=5
+NEGATIVE_HARD_RATIO=0.8
+NEGATIVE_HARD_MIN_IDX=0
 
-# Output directory
-OUTPUT_DIR=beir_results/$DATASET/experiment_$(date +%m%d-%H%M)
+
 
 # LoRA parameters
-lora_r=64
-lora_alpha=32
-lora_dropout=0.1
-lora_target_modules="query,key,value,output.dense,intermediate.dense"
+LORA_R=64
+LORA_ALPHA=32
+LORA_DROPOUT=0.1
+LORA_TARGET_MODULES="query,key,value,output.dense,intermediate.dense"
+USE_RSLORA=True
+INIT_LORA_WEIGHTS=olora
 
-echo "Running experiment. Results will be saved inside $OUTPUT_DIR"
+if [[ -n "${LORA_R}" ]]; then # if 'LORA_R' is defined, finetune the model with LoRA
 
-python ./finetuning.py \
+    OUTPUT_DIR=beir_results/$DATASET/lora_experiment_$(date +%m%d-%H%M)
+    echo "Finetuning with LoRA. Results will be saved inside $OUTPUT_DIR"
+
+    python ./finetuning.py \
     --model_path $MODEL_PATH \
     --train_data $TRAIN_DATA \
     --eval_data $EVAL_DATA \
-    --lora_r $lora_r \
-    --lora_alpha $lora_alpha \
-    --lora_dropout $lora_dropout \
-    --lora_target_modules $lora_target_modules \
-    --use_rslora $USE_RSLORA \
-    --init_lora_weights $INIT_LORA_WEIGHTS \
     --total_steps $TOTAL_STEPS \
     --save_freq $SAVE_FREQ \
     --log_freq $LOG_FREQ \
     --eval_freq $EVAL_FREQ \
     --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
     --output_dir $OUTPUT_DIR \
-    --negative_ctxs 5 \
-    --negative_hard_ratio 0.8 \
-    --negative_hard_min_idx 0
+    --negative_ctxs $NEGATIVE_CTXS \
+    --negative_hard_ratio $NEGATIVE_HARD_RATIO \
+    --negative_hard_min_idx $NEGATIVE_HARD_MIN_IDX \
+    --use_lora \
+    --lora_r $LORA_R \
+    --lora_alpha $LORA_ALPHA \
+    --lora_dropout $LORA_DROPOUT \
+    --lora_target_modules $LORA_TARGET_MODULES \
+    --use_rslora $USE_RSLORA \
+    --init_lora_weights $INIT_LORA_WEIGHTS
+
+else # if 'LORA_R' is not defined, finetune the model without LoRA
+
+    OUTPUT_DIR=beir_results/$DATASET/finetuned_basemodel_experiment_$(date +%m%d-%H%M)
+    echo "Finetuning basemodel. Results will be saved inside $OUTPUT_DIR"
+    
+    DROPOUT=0.1
+
+    python ./finetuning.py \
+    --model_path $MODEL_PATH \
+    --train_data $TRAIN_DATA \
+    --eval_data $EVAL_DATA \
+    --total_steps $TOTAL_STEPS \
+    --dropout $DROPOUT \
+    --save_freq $SAVE_FREQ \
+    --log_freq $LOG_FREQ \
+    --eval_freq $EVAL_FREQ \
+    --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
+    --output_dir $OUTPUT_DIR \
+    --negative_ctxs $NEGATIVE_CTXS \
+    --negative_hard_ratio $NEGATIVE_HARD_RATIO \
+    --negative_hard_min_idx $NEGATIVE_HARD_MIN_IDX
+fi

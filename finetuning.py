@@ -50,13 +50,27 @@ def apply_lora(model, opt):
             logger.error(f"{name}")
     return model
 
-def save_lora_model(model, output_dir, step=None):
+
+def save_lora_model(model, optimizer, scheduler, output_dir, opt,  step=None):
     if hasattr(model, "module"):
-        model = model.module
+        model = model.module # remove the DataParallel wrapper
     if step:
-        model.save_pretrained(f"{output_dir}/lora_step-{step}") # since model was wrapped with PEFT's LoRA, this should save only the LoRA weights and config
+        fp = os.path.join(output_dir, f"lora_step-{step}")
+        model.save_pretrained(fp) # since model was wrapped with PEFT's LoRA, this should save only the LoRA weights and config
     else: # final model
-        model.save_pretrained(f"{output_dir}/final_lora_model")
+        fp = os.path.join(output_dir, "final_lora_model")
+        model.save_pretrained(fp)
+
+    # save the optimizer and scheduler state separately
+    checkpoint_fp = os.path.join(fp, "checkpoint.pth")
+    checkpoint = {
+        "step": step,
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "opt": opt
+    }
+    torch.save(checkpoint, checkpoint_fp)
+    logger.info(f"Saved LoRA model and training state to {fp}")
 
 
 def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
@@ -153,7 +167,18 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 evaluate(opt, eval_model, tokenizer, tb_logger, step)
 
                 if step % opt.save_freq == 0 and dist_utils.get_rank() == 0: # save the model every save_freq steps
-                    save_lora_model(model, opt.output_dir, step)
+                    if opt.use_lora: # if LoRA is applied, save the LoRA module
+                        save_lora_model(model, optimizer, scheduler, opt.output_dir, opt, step)
+                    else: # otherwise, save the whole finetuned model
+                        utils.save(
+                        model,
+                        optimizer,
+                        scheduler,
+                        step,
+                        opt,
+                        opt.output_dir,
+                        f"step-{step}",
+                        )
                     logger.info(f"Saved model at step {step}")
                 model.train()
 
@@ -288,14 +313,15 @@ def main():
 
     # print the number of trainable parameters in the model before and after applying LoRA
     logger.info(utils.get_parameters(model))
-    model = apply_lora(model, opt)
+    if opt.use_lora:
+        model = apply_lora(model, opt)
+        logger.info(utils.get_parameters(model, using_lora=True))
     model = model.cuda()
 
     optimizer, scheduler = utils.set_optim(opt, model)
     # if dist_utils.is_main():
     #    utils.save(model, optimizer, scheduler, global_step, 0., opt, opt.output_dir, f"step-{0}")
-    logger.info(utils.get_parameters(model, using_lora=True))
-
+    
     for name, module in model.named_modules():
         if isinstance(module, torch.nn.Dropout):
             module.p = opt.dropout
@@ -313,8 +339,18 @@ def main():
 
     # save the final model
     if dist_utils.get_rank() == 0:
-        save_lora_model(model, opt.output_dir)
-
+        if opt.use_lora:
+            save_lora_model(model, optimizer, scheduler, opt.output_dir, opt, step)
+        else:
+            utils.save(
+                model,
+                optimizer,
+                scheduler,
+                step,
+                opt,
+                opt.output_dir,
+                "final_model",
+            )
 
 if __name__ == "__main__":
     main()

@@ -1,30 +1,62 @@
 #!/bin/bash
 
+# args:
 # MODEL_NAME_OR_PATH: Model name or path to the model.
 # DATASET: Dataset to evaluate.
-# EXPERIMENT_NAME: Name of the experiment.
-# LORA_MODEL_AT_STEP: Step of the LoRA model to evaluate.
+# BEIR_DIR: Directory where the BEIR datasets are stored.
+# LORA_ADAPTER_PATH: Path to a folder containing a LoRA adapter. 
+# FINETUNED_BASEMODEL_CHECKPOINT: Path to a folder containing a checkpoint of a fine-tuned model.
 
 MODEL_NAME_OR_PATH=facebook/contriever-msmarco
 DATASET=DATASET_NAME_HERE
 BEIR_DIR=beir_datasets
-EXPERIMENT_NAME=EXPERIMENT_NAME_HERE
-LORA_MODEL_AT_STEP=INSERT_LORA_MODEL_STEP_HERE
-
-LORA_ADAPTER_PATH=beir_results/${DATASET}/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
 save_results_path=./beir_results/${DATASET}/contriever-beir-results/
-lora_save_results_path=./beir_results/${DATASET}/${EXPERIMENT_NAME}/${LORA_MODEL_AT_STEP}
 
-echo "Evaluating without LoRA"
+
+# LoRA parameters (optional)
+# LORA_ADAPTER_PATH=beir_results/scifact/lora_experiment_0322-1205/lora_step-20
+
+# Finetuned model path (optional)
+# FINETUNED_BASEMODEL_CHECKPOINT=beir_results/scifact/finetuned_basemodel_experiment_0322-1221/checkpoint/step-20
+
+
+
+#########################################################################################################################################
+
 if [[ ! -d "${save_results_path}" ]]; then # if the base-model evaluation folder does not exist, perform the evaluation
+    echo "Evaluating basemodel"
     mkdir -p ./beir_results/${DATASET}/contriever-beir-results/
     python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --beir_dir $BEIR_DIR --save_results_path $save_results_path --output_dir $save_results_path
 else
     echo "Base model evaluation already performed and saved in ${save_results_path}.txt"
 fi
 
-echo "Evaluating with LoRA"
-python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --beir_dir $BEIR_DIR --lora_adapter_path $LORA_ADAPTER_PATH --save_results_path $lora_save_results_path --output_dir $lora_save_results_path
 
-echo "Creating table with results for $DATASET"
-python ./beir_results/visualize_results.py --dataset $DATASET --experiment_name $EXPERIMENT_NAME --lora_model_at_step $LORA_MODEL_AT_STEP
+if [[ -n "${LORA_ADAPTER_PATH}" ]]; then # if 'LORA_ADAPTER_PATH' is defined, evaluate the model with LoRA
+    echo "Evaluating with LoRA"
+    python eval_beir.py \
+        --model_name_or_path $MODEL_NAME_OR_PATH \
+        --dataset $DATASET \
+        --beir_dir $BEIR_DIR \
+        --lora_adapter_path $LORA_ADAPTER_PATH \
+        --save_results_path $LORA_ADAPTER_PATH \
+        --output_dir $LORA_ADAPTER_PATH
+
+    echo "Creating table with results for "$DATASET" in "$LORA_ADAPTER_PATH", confronting the base model with LoRA"
+    python ./beir_results/visualize_results.py --dataset $DATASET --results_folder $LORA_ADAPTER_PATH
+fi
+
+
+if [[ -n "${FINETUNED_BASEMODEL_CHECKPOINT}" ]]; then # if 'FINETUNED_BASEMODEL_CHECKPOINT' is defined, evaluate the fine-tuned model
+    echo "Evaluating fine-tuned base model"
+    python eval_beir.py \
+        --model_name_or_path $MODEL_NAME_OR_PATH \
+        --dataset $DATASET \
+        --beir_dir $BEIR_DIR \
+        --finetuned_basemodel_checkpoint $FINETUNED_BASEMODEL_CHECKPOINT \
+        --save_results_path $FINETUNED_BASEMODEL_CHECKPOINT \
+        --output_dir $FINETUNED_BASEMODEL_CHECKPOINT
+
+    echo "Creating table with results for "$DATASET" in "$FINETUNED_BASEMODEL_CHECKPOINT", confronting the base model with the fine-tuned model"
+    python ./beir_results/visualize_results.py --dataset $DATASET --results_folder $FINETUNED_BASEMODEL_CHECKPOINT
+fi
