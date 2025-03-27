@@ -7,6 +7,7 @@ from sentence_transformers.util import mine_hard_negatives
 import os
 import beir.util
 import argparse
+from tqdm import tqdm
 
 
 def load_jsonl(file_path):
@@ -35,6 +36,22 @@ def save_jsonl(data, file_path):
     with open(file_path, 'w', encoding='utf-8') as f:
         for entry in data:
             f.write(json.dumps(entry) + '\n')
+
+
+
+def create_negative_corpus(qrels, corpus):
+    "Precompute the negative corpus (all documents - relevant documents)"
+    
+    negative_corpus = set(corpus.keys())
+    
+    for _, relevant_docs in tqdm(qrels.items(), desc="Creating negative corpus", unit="queries", total=len(qrels)):
+        # remove the positive document IDs for this query from the corpus
+        positive_doc_ids = set(relevant_docs.keys())
+        negative_corpus -= positive_doc_ids
+    
+    print(f"Initial corpus size: {len(corpus)}\nNegative corpus size: {len(negative_corpus)}")
+    return list(negative_corpus)
+
 
 def prepare_dataset_with_negatives(
     dataset_name,
@@ -100,76 +117,42 @@ def prepare_dataset_with_negatives(
     corpus = load_jsonl(corpus_file)
     qrels = load_tsv(qrels_file)
 
-    all_doc_ids = set(corpus.keys())
+    negative_corpus = create_negative_corpus(qrels, corpus)
+
+    # filter away queries without qrels
+    valid_qids = [qid for qid in qrels if qid in queries]
+    # if max_examples is set, limit the number of queries to be processed
+    if max_examples is not None:
+        valid_qids = valid_qids[:max_examples]
+    
+    print(f"Processing {len(valid_qids)} valid queries")
+
     dataset_entries = []
-    
-    # group queries and maintain a counter for examples
-    examples_count = 0
-    
-    # process by query to gather all positives for each query
-    query_data = {}
-    for qid, relevant_docs in qrels.items():
-        if qid not in queries:  # skip qrels without queries
-            print(f"Query {qid} not found in the queries file.")
-            continue
+
+    for qid in tqdm(valid_qids, desc="Extracting negatives", unit="queries", total=len(valid_qids)):
         
+        relevant_docs = qrels[qid]
         query_text = queries[qid]["text"]
-        positive_doc_ids = [doc_id for doc_id in relevant_docs.keys()]
         
-        if not positive_doc_ids:
-            print(f"No relevant documents found for query {qid}.")
-            continue # skip queries without relevant documents
-            
-        # get all positives for this query
-        valid_positives = []
-        for pos_doc_id in positive_doc_ids:
-            if pos_doc_id in corpus:
-                valid_positives.append(pos_doc_id)
-            else:
-                print(f"Document {pos_doc_id} not found in the corpus.")
-                
+        valid_positives = [doc_id for doc_id in relevant_docs if doc_id in corpus]
+
         if not valid_positives:
-            print(f"No valid positive documents found for query {qid}.")
-            continue # skip if no valid positives
-            
+            continue  # skip if no valid positives
+        
         # sample random negatives
-        negative_doc_ids = random.sample(
-            list(all_doc_ids - set(relevant_docs.keys())), 
-            min(num_negatives, len(all_doc_ids) - len(relevant_docs)) # ensure we don't sample more negatives than available
-        )
+        negative_doc_ids =  random.sample(negative_corpus, min(num_negatives, len(negative_corpus)))
+
+        positive_ctxs = [{
+            "title": corpus[pos_doc_id].get("title", ""),
+            "text": corpus[pos_doc_id]["text"]
+        } for pos_doc_id in valid_positives]
         
-        query_data[qid] = {
-            "question": query_text,
-            "positive_doc_ids": valid_positives,
-            "negative_doc_ids": negative_doc_ids
-        }
+        negative_ctxs = [{
+            "title": corpus[neg_id].get("title", ""),
+            "text": corpus[neg_id]["text"]
+        } for neg_id in negative_doc_ids]
         
-        examples_count += 1
-        if max_examples is not None and examples_count >= max_examples:
-            break
-    
-    # prepare dataset entries with all positive examples per query
-    for qid, data in query_data.items():
-        
-        query_text = data["question"]
-        
-        # create a list of all positive contexts
-        positive_ctxs = []
-        for pos_doc_id in data["positive_doc_ids"]:
-            positive_ctxs.append({
-                "title": corpus[pos_doc_id].get("title", ""),
-                "text": corpus[pos_doc_id]["text"]
-            })
-        
-        # create a list of all negative contexts
-        negative_ctxs = []
-        for neg_id in data["negative_doc_ids"]:
-            negative_ctxs.append({
-                "title": corpus[neg_id].get("title", ""),
-                "text": corpus[neg_id]["text"]
-            })
-        
-        # finally create an entry with multiple positives and negatives
+        # Crea l'entry finale
         entry = {
             "question": query_text,
             "positive_ctxs": positive_ctxs,
@@ -177,7 +160,7 @@ def prepare_dataset_with_negatives(
         }
         
         dataset_entries.append(entry)
-    
+  
     # if a retriever is provided, we mine for the hard negatives
     # otherwise, 'dataset_entries' will be used as is
 
@@ -220,7 +203,9 @@ def prepare_dataset_with_negatives(
             margin=margin,
             sampling_strategy=sampling_strategy,
             as_triplets=False,
-            batch_size=batch_size
+            batch_size=batch_size,
+            # use_faiss=True,
+            # use_multi_process=True
         )
         # NOTE: this way we lose the 'title' information for the hard negatives, but it's not a problem since in 'src/finetuning_data.py' this information are collapsed anyway        
         
@@ -276,6 +261,10 @@ def main(args):
         batch_size=args.batch_size,
         max_examples=args.max_examples
     )
+
+    # save the settings used for mining hard negatives
+    with open(f"beir_datasets/{args.dataset_name}/mining_settings.json", "w") as f:
+        json.dump(vars(args), f)
     
     # test data
     prepare_dataset_with_negatives(
@@ -285,7 +274,7 @@ def main(args):
         retriever=None,  # no hard negatives for test data
         num_negatives=args.num_negatives,
         num_hard_negatives=0,
-        max_examples=None,
+        max_examples=args.max_examples,
         batch_size=None
     )
 
@@ -298,11 +287,11 @@ if __name__ == "__main__":
     parser.add_argument("--num_negatives", type=int, help="Number of random negative documents per query", default=5)
     # hard negatives parameters
     parser.add_argument("--num_hard_negatives", type=int, help="Number of hard negative documents per query", default=5)
-    parser.add_argument("--range_min", type=int, help="Excludes the top 'range_min' most similar candidates", default=1)
-    parser.add_argument("--range_max", type=int, help="Maximum rank of the closest matches to consider as negatives", default=30)
-    parser.add_argument("--max_score", type=float, help="Allow negatives with a similarity score up to this value", default=0.8)
+    parser.add_argument("--range_min", type=int, help="Excludes the top 'range_min' most similar candidates", default=None)
+    parser.add_argument("--range_max", type=int, help="Maximum rank of the closest matches to consider as negatives", default=None)
+    parser.add_argument("--max_score", type=float, help="Allow negatives with a similarity score up to this value", default=None)
     parser.add_argument("--min_score", type=float, help="Exclude further negatives", default=None)
-    parser.add_argument("--margin", type=float, help="Useful to skip candidates negatives whose similarity to the anchor is within a certain margin of the positive pair", default=0.1)
+    parser.add_argument("--margin", type=float, help="Useful to skip candidates negatives whose similarity to the anchor is within a certain margin of the positive pair", default=None)
     parser.add_argument("--sampling_strategy", type=str, help="'top' will sample the hardest negatives, 'random' will sample randomly", default="top")
     parser.add_argument("--batch_size", type=int, help="Batch size for mining hard negatives", default=32)
     parser.add_argument("--max_examples", type=int, help="Maximum number of examples to generate", default=None)

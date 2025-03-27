@@ -4,12 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import sys
 import argparse
 import torch
 import logging
-import json
-import numpy as np
 import os
 
 # import src.slurm
@@ -59,7 +56,7 @@ def main(args):
         model.load_state_dict(checkpoint["model"])
         logger.info("Model loaded successfully")
     else:
-        raise ValueError("Either LoRA adapter path or finetuned base-model checkpoint must be provided.")
+        logger.info("No LoRA adapter or finetuned base-model loaded. Evaluating base model...")
 
 
     model = model.cuda()

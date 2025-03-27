@@ -9,9 +9,6 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from src.options import Options
 from src import dist_utils, utils, contriever, finetuning_data, inbatch
-
-from torch.utils import tensorboard
-
 import train
 
 # LoRA
@@ -35,9 +32,9 @@ def apply_lora(model, opt):
         task_type=TaskType.FEATURE_EXTRACTION,
         r=opt.lora_r,
         lora_alpha=opt.lora_alpha,
-        use_rslora= True if opt.use_rslora == "True" else False,
+        use_rslora= True if str(opt.use_rslora).lower() == "true" else False,
         lora_dropout=opt.lora_dropout,
-        init_lora_weights=opt.init_lora_weights,
+        init_lora_weights=opt.init_lora_weights if opt.init_lora_weights != 'none' else True,
         target_modules=target_modules,
         
     )
