@@ -142,6 +142,9 @@ def mine_hard_negatives(
         k = min(k, scores.size(1))
         scores, indices = torch.topk(scores, k, dim=1)
     
+    del query_embeddings
+    del corpus_embeddings
+    
     indices = indices.cpu().numpy()
     scores = scores.cpu().numpy()
 

@@ -109,6 +109,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
         collate_fn=collator,
     )
 
+    logger.info(f"Number of training samples: {len(train_dataset)}")
+    
     train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step) # evaluate the model before training
     evaluate(opt, eval_model, tokenizer, tb_logger, step) # evaluate the model before training
 
@@ -126,26 +128,22 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
         for i, batch in enumerate(train_dataloader):
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
-            step += 1
 
-            train_loss, iter_stats = model(**batch, stats_prefix="train") # 
+            train_loss, iter_stats = model(**batch, stats_prefix="train") 
             train_loss.backward() 
-
-            if opt.optim == "sam" or opt.optim == "asam": # if SAM or ASAM optimizer is used, applies a double update
-                optimizer.first_step(zero_grad=True)
-
-                sam_loss, _ = model(**batch, stats_prefix="train/sam_opt")
-                sam_loss.backward()
-                optimizer.second_step(zero_grad=True)
-
-            else:
-                optimizer.step()
-            
-            scheduler.step() # adjusts the learning rate
-            optimizer.zero_grad()
 
             run_stats.update(iter_stats)
 
+            # step and zero_grad every 'accumulation_steps' mini-batches (or if the last mini-batch)
+            if (i + 1) % opt.accumulation_steps == 0 or (i + 1) == len(train_dataloader):
+                optimizer.step()
+                scheduler.step() # adjusts the learning rate
+                optimizer.zero_grad()
+                step += 1
+            else:
+                continue
+            
+            
             if step % opt.log_freq == 0: # log the training statistics
                 log = f"{step} / {opt.total_steps}"
                 for k, v in sorted(run_stats.average_stats.items()): # average statistics
@@ -316,8 +314,6 @@ def main():
     model = model.cuda()
 
     optimizer, scheduler = utils.set_optim(opt, model)
-    # if dist_utils.is_main():
-    #    utils.save(model, optimizer, scheduler, global_step, 0., opt, opt.output_dir, f"step-{0}")
     
     for name, module in model.named_modules():
         if isinstance(module, torch.nn.Dropout):
@@ -330,6 +326,9 @@ def main():
             output_device=opt.local_rank,
             find_unused_parameters=False,
         )
+
+    if opt.accumulation_steps > 1:
+        logger.info(f"Gradient accumulation steps: {opt.accumulation_steps}. Because of this the actual batch size is {opt.per_gpu_batch_size} * {opt.accumulation_steps} = {opt.per_gpu_batch_size * opt.accumulation_steps}.")
 
     logger.info("Start training")
     finetuning(opt, model, optimizer, scheduler, tokenizer, step)

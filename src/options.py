@@ -104,6 +104,7 @@ class Options:
         self.parser.add_argument("--label_smoothing", type=float, default=0.0)
 
         # finetuning options
+        self.parser.add_argument("--accumulation_steps", type=int, default=1)
         self.parser.add_argument("--negative_ctxs", type=int, default=1)
         self.parser.add_argument("--negative_hard_min_idx", type=int, default=0)
         self.parser.add_argument("--negative_hard_ratio", type=float, default=0.0)
