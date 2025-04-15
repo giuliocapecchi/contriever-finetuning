@@ -101,6 +101,26 @@ class XLMRetriever(XLMRobertaModel):
 
 
 def load_retriever(model_path, pooling="average", random_init=False):
+    """
+    Loads a retriever model along with its tokenizer and model identifier.
+    This function attempts to load a pretrained retriever model from a specified
+    directory. If a checkpoint file is found within the direcotory, it initializes
+    the model using the saved state. Otherwise, it initializes the model from a
+    Hugging Face model identifier.
+    Args:
+        model_path (str): Path to the directory containing the model checkpoint
+            or the Hugging Face model identifier.
+        pooling (str, optional): Pooling method to be used by the retriever.
+            Defaults to "average".
+        random_init (bool, optional): If True, initializes the model with random
+            weights instead of loading pretrained weights. Defaults to False.
+    Returns:
+        tuple: A tuple containing:
+            - retriever (torch.nn.Module): The loaded retriever model.
+            - tokenizer (transformers.PreTrainedTokenizer): The tokenizer associated
+              with the retriever model.
+            - retriever_model_id (str): The identifier of the retriever model.
+    """
     # try: check if model exists locally
     path = os.path.join(model_path, "checkpoint.pth")
     if os.path.exists(path):

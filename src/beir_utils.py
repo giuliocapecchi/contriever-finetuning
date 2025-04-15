@@ -17,6 +17,7 @@ from beir.reranking import Rerank
 
 import src.dist_utils as dist_utils
 from src import normalize_text
+import glob
 
 
 class DenseEncoderModel:
@@ -195,7 +196,7 @@ def evaluate_model(
     elif dataset == "cqadupstack":  # compute macroaverage over datasets
         paths = glob.glob(data_path)
         for path in paths:
-            corpus, queries, qrels = GenericDataLoader(data_folder=data_folder).load(split=split)
+            corpus, queries, qrels = GenericDataLoader(data_folder=path).load(split=split)
             results = retriever.retrieve(corpus, queries)
             if is_main:
                 ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)

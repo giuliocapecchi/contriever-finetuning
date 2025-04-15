@@ -119,6 +119,7 @@ def mine_hard_negatives(
         
         # use gpu if available
         try:
+            print("Using FAISS GPU.")
             co = faiss.GpuMultipleClonerOptions()
             co.shard = True
             co.useFloat16 = True
@@ -178,6 +179,10 @@ def mine_hard_negatives(
         
         positive_contexts = []
         for doc_id in positive_docids:
+            if doc_id not in corpus:
+                if verbose:
+                    print(f"Warning: positive doc_id {doc_id} not found in corpus. Skipping.")
+                continue
             positive_context = {}
             if include_docids_and_scores:
                 positive_context['docid'] = doc_id

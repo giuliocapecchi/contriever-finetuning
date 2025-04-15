@@ -122,8 +122,9 @@ class CosineScheduler(torch.optim.lr_scheduler.LambdaLR):
 
 def set_optim(opt, model):
     if opt.optim == "adamw":
+        # loading adamw explicitly telling what are the parameters to optimize
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=opt.lr, betas=(opt.beta1, opt.beta2), eps=opt.eps, weight_decay=opt.weight_decay
+            filter(lambda p: p.requires_grad, model.parameters()), lr=opt.lr, betas=(opt.beta1, opt.beta2), eps=opt.eps, weight_decay=opt.weight_decay
         )
     else:
         raise NotImplementedError("optimizer class not implemented")

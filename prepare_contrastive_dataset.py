@@ -203,9 +203,14 @@ def main(args):
         dataset_name= args.dataset_name,
         target = "dev",
         output_file=f"beir_datasets/{args.dataset_name}/dev_data.jsonl",
-        model=None,  # no hard negatives for dev data
+         model=model,
         num_negatives=args.num_negatives,
-        num_hard_negatives=0
+        num_hard_negatives=args.num_hard_negatives,
+        range_max=args.range_max,
+        batch_size=args.batch_size,
+        use_faiss=args.use_faiss,
+        use_multi_process=args.use_multi_process,
+        include_docids_and_scores=args.include_docids_and_scores,
     )
     
     # test data
