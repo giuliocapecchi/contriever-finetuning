@@ -165,18 +165,16 @@ class Collator(object):
         q_tokens, q_mask = qout["input_ids"], qout["attention_mask"].bool()
         k_tokens, k_mask = kout["input_ids"], kout["attention_mask"].bool()
 
-        g_tokens, g_mask = k_tokens[: len(golds)], k_mask[: len(golds)]
-        n_tokens, n_mask = k_tokens[len(golds) :], k_mask[len(golds) :]
+        num_golds = len(golds)
+        num_negs = len(negs)
 
         batch = {
             "q_tokens": q_tokens,
             "q_mask": q_mask,
             "k_tokens": k_tokens,
             "k_mask": k_mask,
-            "g_tokens": g_tokens,
-            "g_mask": g_mask,
-            "n_tokens": n_tokens,
-            "n_mask": n_mask,
+            "num_golds": num_golds,
+            "num_negs": num_negs,
         }
 
         return batch

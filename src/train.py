@@ -102,12 +102,33 @@ def train(opt, model, optimizer, scheduler, step):
 
 
 def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
+    
+    query_encoder = query_encoder.get_encoder()
+    if doc_encoder is not None:
+            doc_encoder = doc_encoder.get_encoder()
+    
     for datasetname in opt.eval_datasets:
+
+        # if used, check if the minicorpus exists. otherwise, create it
+        if opt.use_minicorpus and not os.path.exists(os.path.join(opt.eval_datasets_dir, datasetname, "minicorpus.jsonl")):
+            logger.warning(f"Minicorpus for {datasetname} not found but your configuration requires it. Creating it with default values (0.1% of original rows)")
+            
+            from src import create_minicorpus
+
+            create_minicorpus.create_minicorpus(
+                dataset_name=datasetname,
+                beir_directory=opt.eval_datasets_dir,
+                sample_size=0.1
+            )
+
+        logger.info(f"Evaluating {datasetname}..." if not opt.use_minicorpus else f"Evaluating {datasetname} (minicorpus)...")
         metrics = beir_utils.evaluate_model(
             query_encoder,
             doc_encoder,
             tokenizer,
             dataset=datasetname,
+            use_minicorpus=opt.use_minicorpus,
+            split=opt.eval_split,
             batch_size=opt.per_gpu_eval_batch_size,
             norm_doc=opt.norm_doc,
             norm_query=opt.norm_query,
@@ -117,12 +138,12 @@ def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
             normalize_text=opt.eval_normalize_text,
         )
 
-        message = []
+        message = ["[EVAL]"]
         if dist_utils.is_main():
             for metric in ["NDCG@10", "Recall@10", "Recall@100"]:
                 message.append(f"{datasetname}/{metric}: {metrics[metric]:.2f}")
                 if tb_logger is not None:
-                    tb_logger.add_scalar(f"{datasetname}/{metric}", metrics[metric], step)
+                    tb_logger.add_scalar(f"eval/{datasetname}/{metric}", metrics[metric], step)
             logger.info(" | ".join(message))
 
 

@@ -30,7 +30,7 @@ class Options:
             "--eval_datasets", nargs="+", default=[], help="List of datasets used for evaluation, in BEIR format"
         )
         self.parser.add_argument(
-            "--eval_datasets_dir", type=str, default="./", help="Directory where eval datasets are stored"
+            "--eval_datasets_dir", type=str, default="./beir_datasets", help="Directory where eval datasets are stored"
         )
         self.parser.add_argument("--model_path", type=str, default="none", help="path for retraining")
         self.parser.add_argument("--continue_training", action="store_true")
@@ -74,6 +74,9 @@ class Options:
         self.parser.add_argument(
             "--per_gpu_eval_batch_size", default=256, type=int, help="Batch size per GPU for evaluation."
         )
+        self.parser.add_argument("--use_minicorpus", action="store_true", help="wether to use a reduced corpus for evaluation (speeds up computations). The minicorpus is a subset of the original corpus and should be placed inside the dataset folder with name 'minicorpus.jsonl'.")
+        self.parser.add_argument("--eval_split", type=str, default="dev", help="split used for evaluation")
+
         self.parser.add_argument("--total_steps", type=int, default=1000)
         self.parser.add_argument("--warmup_steps", type=int, default=-1)
 
@@ -111,12 +114,12 @@ class Options:
 
         # LoRA options
         self.parser.add_argument("--use_lora", action="store_true", help="Whether to use LoRA or the base model.")
-        self.parser.add_argument("--lora_r", type=int, default=8)
-        self.parser.add_argument("--use_rslora", type=str, default="none")
-        self.parser.add_argument("--lora_alpha", type=float, default=32)
+        self.parser.add_argument("--lora_r", type=int, default=8, help ="LoRA matrix rank")
+        self.parser.add_argument("--use_rslora", action="store_true", help="Whether to use RSLORA for alpha scaling.") 
+        self.parser.add_argument("--lora_alpha", type=float, default=32, help="LoRA alpha scaling factor")
         self.parser.add_argument("--lora_dropout", type=float, default=0.1, help="dropout for LoRA")
         self.parser.add_argument("--init_lora_weights", type=str, default="none", help="Choose between 'gaussian', 'eva', 'olora', 'pissa', 'pissa_niter_[number of iters]', 'loftq'")
-        self.parser.add_argument("--lora_target_modules", nargs="+", default=None)
+        self.parser.add_argument("--lora_target_modules", nargs="+", default=None, help="LoRA target modules")
         
 
     def print_options(self, opt):

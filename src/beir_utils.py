@@ -128,6 +128,7 @@ def evaluate_model(
     doc_encoder,
     tokenizer,
     dataset,
+    use_minicorpus=False,
     batch_size=128,
     add_special_tokens=True,
     norm_query=False,
@@ -177,7 +178,7 @@ def evaluate_model(
     dist_utils.barrier()
 
     if not dataset == "cqadupstack":
-        corpus, queries, qrels = GenericDataLoader(data_folder=data_path).load(split=split)
+        corpus, queries, qrels = GenericDataLoader(data_folder=data_path, corpus_file="minicorpus.jsonl" if use_minicorpus else "corpus.jsonl").load(split=split)
         results = retriever.retrieve(corpus, queries)
         if is_main:
             ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)

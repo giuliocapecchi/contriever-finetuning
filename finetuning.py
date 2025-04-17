@@ -9,14 +9,13 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from src.options import Options
 from src import dist_utils, utils, contriever, finetuning_data, inbatch
-import train
+import src.train as train
 
-# LoRA
 from peft import get_peft_model, LoraConfig, TaskType
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-logger = logging.getLogger(__name__) # logger for this file
+logger = logging.getLogger(__name__)
 
 
 def apply_lora(model, opt):
@@ -58,7 +57,7 @@ def save_lora_model(model, optimizer, scheduler, output_dir, opt,  step=None):
         fp = os.path.join(output_dir, "final_lora_model")
         model.save_pretrained(fp)
 
-    # save the optimizer and scheduler state separately
+    # save the optimizer and scheduler state
     checkpoint_fp = os.path.join(fp, "checkpoint.pth")
     checkpoint = {
         "step": step,
@@ -74,15 +73,8 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
     run_stats = utils.WeightedAvgStats()
 
-    tb_logger = utils.init_tb_logger(opt.output_dir) # tensorboard logger
+    tb_logger = utils.init_tb_logger(opt.output_dir)
 
-    if hasattr(model, "module"): # if model is a DataParallel object (DDP)
-        logger.info("Model is a DataParallel object")
-        eval_model = model.module 
-    else:
-        logger.info("Model is not a DataParallel object")
-        eval_model = model
-    eval_model = eval_model.get_encoder()
 
     # load the training data
     train_dataset = finetuning_data.Dataset(
@@ -111,17 +103,17 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
     logger.info(f"Number of training samples: {len(train_dataset)}")
     
-    train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step) # evaluate the model before training
-    evaluate(opt, eval_model, tokenizer, tb_logger, step) # evaluate the model before training
+    # consider that train.eval_model will have an effect only if opt.eval_datasets is non-empty
+    train.eval_model(opt, model, None, tokenizer, tb_logger, step)
+    evaluate(opt, model, tokenizer, tb_logger, step) # evaluate the model before training
 
     epoch = 1
 
-    model.train() # sets model in training mode
+    model.train()
 
     while step < opt.total_steps:
         logger.info(f"Start epoch {epoch}, number of batches: {len(train_dataloader)}")
         
-        # logging to ensure the correct number of batches
         if len(train_dataloader) == 0:
             logger.warning("No batches found in train_dataloader. Check your training data.")
             break
@@ -143,7 +135,6 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
             else:
                 continue
             
-            
             if step % opt.log_freq == 0: # log the training statistics
                 log = f"{step} / {opt.total_steps}"
                 for k, v in sorted(run_stats.average_stats.items()): # average statistics
@@ -156,12 +147,12 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 logger.info(log)
                 run_stats.reset()
 
-            if step % opt.eval_freq == 0: # evaluate the model every eval_freq steps
+            if step % opt.eval_freq == 0: # evaluation
 
-                train.eval_model(opt, eval_model, None, tokenizer, tb_logger, step)
-                evaluate(opt, eval_model, tokenizer, tb_logger, step)
+                train.eval_model(opt, model, None, tokenizer, tb_logger, step)
+                evaluate(opt, model, tokenizer, tb_logger, step)
 
-                if step % opt.save_freq == 0 and dist_utils.get_rank() == 0: # save the model every save_freq steps
+                if step % opt.save_freq == 0 and dist_utils.get_rank() == 0: # model checkpoint
                     if opt.use_lora: # if LoRA is applied, save the LoRA module
                         save_lora_model(model, optimizer, scheduler, opt.output_dir, opt, step)
                     else: # otherwise, save the whole finetuned model
@@ -207,39 +198,38 @@ def evaluate(opt, model, tokenizer, tb_logger, step):
         collate_fn=collator,
     )
 
-    model.eval() # sets model in evaluation (inference) mode (normalisation layers use running statistics, de-activates Dropout layers)
+    model.eval() # sets model in evaluation mode (normalisation layers use running statistics, de-activates Dropout layers)
 
     if hasattr(model, "module"): # if model is a DataParallel object (DDP) remove the DataParallel wrapper
         model = model.module
 
-    all_q, all_g, all_n = [], [], [] # lists to store the query, positive and negative embeddings
+    all_q, all_g, all_n = [], [], []
 
-    logger.info("Start embedding all queries and documents")
+    logger.info("Evaluation: embedding all queries and documents")
+
+    eval_loss = 0
+    tot_num_batches = len(dataloader)
 
     with torch.no_grad(): # disables gradient calculation to save memory (speeds up computation)
         for i, batch in enumerate(dataloader):
 
             batch = {key: value.cuda() if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
 
-            all_tokens = torch.cat([batch["g_tokens"], batch["n_tokens"]], dim=0) # concatenate the positive and negative tokens
-            all_mask = torch.cat([batch["g_mask"], batch["n_mask"]], dim=0) # concatenate the positive and negative masks
+            loss, q_emb, all_emb = model(**batch, stats_prefix="dev", return_embeddings=True)
+            eval_loss += loss
 
-            q_emb = model(input_ids=batch["q_tokens"], attention_mask=batch["q_mask"], normalize=opt.norm_query) # query embeddings
-            all_emb = model(input_ids=all_tokens, attention_mask=all_mask, normalize=opt.norm_doc) # positive and negative embeddings
-
-            g_emb, n_emb = torch.split(all_emb, [len(batch["g_tokens"]), len(batch["n_tokens"])])
+            g_emb, n_emb = torch.split(all_emb, [(batch["num_golds"]), (batch["num_negs"])])
 
             all_q.append(q_emb)
             all_g.append(g_emb)
             all_n.append(n_emb)
 
+        eval_loss = eval_loss / tot_num_batches
+        
         # concatenate query, positive and negative embeddings
         all_q = torch.cat(all_q, dim=0) 
         all_g = torch.cat(all_g, dim=0)
         all_n = torch.cat(all_n, dim=0)
-
-        if dist_utils.is_main():
-            logger.info("Finished embedding all queries and documents")
 
         labels = torch.arange(0, len(all_q), device=all_q.device, dtype=torch.long) # create a tensor of labels for the queries (0, 1, 2, ..., len(all_q))
 
@@ -253,9 +243,9 @@ def evaluate(opt, model, tokenizer, tb_logger, step):
         scores_neg = torch.einsum("id, jd->ij", all_q, all_n) # scalar product between all rows of all_q and all rows of all_n
         scores = torch.cat([scores_pos, scores_neg], dim=-1) 
 
-        argmax_idx = torch.argmax(scores, dim=1) # Returns the index of the maximum value of the scores matrix along the second dimension (axis=1)
+        argmax_idx = torch.argmax(scores, dim=1) # returns the index of the maximum value of the scores matrix along the second dimension (axis=1)
         sorted_scores, indices = torch.sort(scores, descending=True)
-        isrelevant = indices == labels[:, None] # Returns a boolean matrix of the same size as the scores matrix, where each element is True if the corresponding element in the scores matrix is the correct label for the query
+        isrelevant = indices == labels[:, None] # returns a boolean matrix of the same size as the scores matrix, where each element is True if the corresponding element in the scores matrix is the correct label for the query
         rs = [r.cpu().numpy().nonzero()[0] for r in isrelevant] # returns the indices of the relevant documents for each query
         mrr = np.mean([1.0 / (r[0] + 1) if r.size else 0.0 for r in rs])
 
@@ -266,11 +256,13 @@ def evaluate(opt, model, tokenizer, tb_logger, step):
 
         message = []
         if dist_utils.is_main():
-            message = [f"eval acc: {acc:.2f}%", f"eval mrr: {mrr:.3f}"]
+            message = [f"[EVAL] eval/accuracy: {acc:.2f}%", f"eval/mrr: {mrr:.3f}", f"eval/loss: {eval_loss:.3f}"]
             logger.info(" | ".join(message))
             if tb_logger is not None:
-                tb_logger.add_scalar(f"eval_acc", acc, step)
-                tb_logger.add_scalar(f"mrr", mrr, step)
+                tb_logger.add_scalar("eval/acc", acc, step)
+                tb_logger.add_scalar("eval/mrr", mrr, step)
+                tb_logger.add_scalar("eval/loss", eval_loss, step)
+                
 
 
 def main():
@@ -320,6 +312,7 @@ def main():
             module.p = opt.dropout
 
     if torch.distributed.is_initialized():
+        logger.info(f"Using distributed training with {dist_utils.get_world_size()} GPUs")
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[opt.local_rank],
@@ -330,11 +323,10 @@ def main():
     if opt.accumulation_steps > 1:
         logger.info(f"Gradient accumulation steps: {opt.accumulation_steps}. Because of this the actual batch size is {opt.per_gpu_batch_size} * {opt.accumulation_steps} = {opt.per_gpu_batch_size * opt.accumulation_steps}.")
 
-    logger.info("Start training")
     finetuning(opt, model, optimizer, scheduler, tokenizer, step)
 
     # save the final model
-    if dist_utils.get_rank() == 0:
+    if dist_utils.get_rank() == 0 and not opt.total_steps % opt.save_freq == 0:
         if opt.use_lora:
             save_lora_model(model, optimizer, scheduler, opt.output_dir, opt, step)
         else:

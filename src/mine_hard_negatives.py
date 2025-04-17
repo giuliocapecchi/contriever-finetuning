@@ -119,11 +119,11 @@ def mine_hard_negatives(
         
         # use gpu if available
         try:
-            print("Using FAISS GPU.")
             co = faiss.GpuMultipleClonerOptions()
             co.shard = True
             co.useFloat16 = True
             index = faiss.index_cpu_to_all_gpus(index, co=co)
+            print("Using FAISS GPU.")
         except Exception:
             print("FAISS GPU not available, using CPU.")
         

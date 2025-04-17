@@ -63,7 +63,7 @@ class InBatch(nn.Module):
                 print(f"Parameter: {name}, Shape: {param.shape}")
         print(f"Total trainable parameters: {len(trainable_params)}")
 
-    def forward(self, q_tokens, q_mask, k_tokens, k_mask, stats_prefix="", iter_stats={}, **kwargs):
+    def forward(self, q_tokens, q_mask, k_tokens, k_mask, stats_prefix="", iter_stats={}, return_embeddings=False,  **kwargs):
 
         bsz = len(q_tokens)
         labels = torch.arange(0, bsz, dtype=torch.long, device=q_tokens.device)
@@ -81,23 +81,27 @@ class InBatch(nn.Module):
 
         loss = torch.nn.functional.cross_entropy(scores, labels, label_smoothing=self.label_smoothing)
 
-        # log stats
-        if len(stats_prefix) > 0:
+        # log train stats
+        if len(stats_prefix) > 0 and stats_prefix == "train":
             stats_prefix = stats_prefix + "/"
-        iter_stats[f"{stats_prefix}loss"] = (loss.item(), bsz)
 
-        predicted_idx = torch.argmax(scores, dim=-1)
-        accuracy = 100 * (predicted_idx == labels).float().mean()
-        iter_stats[f"{stats_prefix}accuracy"] = (accuracy, bsz)
+            iter_stats[f"{stats_prefix}loss"] = (loss.item(), bsz)
 
-        if bsz > 1:
-            stdq = torch.std(qemb, dim=0).mean().item()
-            stdk = torch.std(kemb, dim=0).mean().item()
+            predicted_idx = torch.argmax(scores, dim=-1)
+            accuracy = 100 * (predicted_idx == labels).float().mean()
+            iter_stats[f"{stats_prefix}accuracy"] = (accuracy, bsz)
+
+            if bsz > 1:
+                stdq = torch.std(qemb, dim=0).mean().item()
+                stdk = torch.std(kemb, dim=0).mean().item()
+            else:
+                stdq = float('nan')
+                stdk = float('nan')
+
+            iter_stats[f"{stats_prefix}stdq"] = (stdq, bsz)
+            iter_stats[f"{stats_prefix}stdk"] = (stdk, bsz)
+
+        if return_embeddings:
+            return loss, qemb, kemb
         else:
-            stdq = float('nan')
-            stdk = float('nan')
-
-        iter_stats[f"{stats_prefix}stdq"] = (stdq, bsz)
-        iter_stats[f"{stats_prefix}stdk"] = (stdk, bsz)
-
-        return loss, iter_stats
+            return loss, iter_stats
