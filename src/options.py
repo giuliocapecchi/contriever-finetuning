@@ -39,31 +39,15 @@ class Options:
         self.parser.add_argument("--chunk_length", type=int, default=256)
         self.parser.add_argument("--loading_mode", type=str, default="split")
         self.parser.add_argument("--lower_case", action="store_true", help="perform evaluation after lowercasing")
-        self.parser.add_argument(
-            "--sampling_coefficient",
-            type=float,
-            default=0.0,
-            help="coefficient used for sampling between different datasets during training, \
-                by default sampling is uniform over datasets",
-        )
-        self.parser.add_argument("--augmentation", type=str, default="none")
-        self.parser.add_argument("--prob_augmentation", type=float, default=0.0)
-
+        
         self.parser.add_argument("--dropout", type=float, default=0.1)
-        self.parser.add_argument("--rho", type=float, default=0.05)
 
-        self.parser.add_argument("--contrastive_mode", type=str, default="moco")
-        self.parser.add_argument("--queue_size", type=int, default=65536)
         self.parser.add_argument("--temperature", type=float, default=1.0)
-        self.parser.add_argument("--momentum", type=float, default=0.999)
-        self.parser.add_argument("--moco_train_mode_encoder_k", action="store_true")
-        self.parser.add_argument("--eval_normalize_text", action="store_true")
+        self.parser.add_argument("--eval_normalize_text", action="store_false")
         self.parser.add_argument("--norm_query", action="store_true")
         self.parser.add_argument("--norm_doc", action="store_true")
         self.parser.add_argument("--projection_size", type=int, default=768)
 
-        self.parser.add_argument("--ratio_min", type=float, default=0.1)
-        self.parser.add_argument("--ratio_max", type=float, default=0.5)
         self.parser.add_argument("--score_function", type=str, default="dot")
         self.parser.add_argument("--retriever_model_id", type=str, default="bert-base-uncased")
         self.parser.add_argument("--pooling", type=str, default="average")

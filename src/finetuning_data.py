@@ -17,13 +17,13 @@ class Dataset(torch.utils.data.Dataset):
         global_rank=-1,
         world_size=-1,
         maxload=None,
-        normalize=False,
+        normalize=True,
     ):
         self.negative_ctxs = negative_ctxs
         self.negative_hard_ratio = negative_hard_ratio
         self.negative_hard_min_idx = negative_hard_min_idx
         self.training = training
-        self.normalize_fn = normalize_text.normalize if normalize_text else lambda x: x
+        self.normalize_fn = normalize_text.normalize if normalize and normalize_text else lambda x: x
         self._load_data(datapaths, global_rank, world_size, maxload)
 
     def __len__(self):
