@@ -11,6 +11,7 @@ def mine_hard_negatives(
     qrels: Dict[str, Dict[str, float]], 
     model: SentenceTransformer = None,
     range_max: int = 50, 
+    relative_margin: float = None,
     num_hard_negatives: int = 10,
     use_faiss: bool = True,
     batch_size: int = 64,
@@ -21,31 +22,38 @@ def mine_hard_negatives(
 ) -> List[Dict[str, Any]]:
     """
     Mines hard negative samples for a given set of queries and a corpus using a SentenceTransformer model.
+    
     Args:
-        queries (Dict[str, Any]): A dictionary where keys are query IDs and values are query texts.
-        corpus (Dict[str, Any]): A dictionary where keys are document IDs and values are document data (e.g., text, title).
+        queries (Dict[str, Any]): A dictionary where keys are query IDs and values are dictionaries containing query data (e.g., text).
+        corpus (Dict[str, Any]): A dictionary where keys are document IDs and values are dictionaries containing document data (e.g., title, text).
         qrels (Dict[str, Dict[str, float]]): A dictionary where keys are query IDs and values are dictionaries of relevant document IDs with their relevance scores.
         model (SentenceTransformer): A SentenceTransformer model used for embedding queries and corpus documents.
         range_max (int, optional): The maximum number of documents to consider for similarity search. Defaults to 50.
+        relative_margin (float, optional): Defines a margin to exclude candidates that are too similar to the positive document. For example, a relative_margin of 0.1 ensures that hard negatives are at most 90% as similar to the query as the positive document. Defaults to None.
         num_hard_negatives (int, optional): The number of hard negatives to mine per query. Defaults to 10.
-        use_faiss (bool, optional): Whether to use FAISS for efficient similarity search. Defaults to True. It's recommended to use for large datasets.
+        use_faiss (bool, optional): Whether to use FAISS for efficient similarity search. Defaults to True. Recommended for large datasets.
         batch_size (int, optional): Batch size for encoding queries and corpus documents. Defaults to 64.
         use_multi_process (bool, optional): Whether to use multi-process encoding for faster computation. Defaults to False.
         target_devices (list[str], optional): List of target devices for multi-process encoding. Defaults to None.
         verbose (bool, optional): Whether to print detailed logs and statistics. Defaults to True.
-        include_docids_and_scores (bool, optional): Whether to include document IDs and similarity scores in the output. Adding them will increase the size of the output. Defaults to False. 
+        include_docids_and_scores (bool, optional): Whether to include document IDs and similarity scores in the output. Defaults to False.
+    
     Returns:
         List[Dict[str, Any]]: A list of dictionaries, each containing:
-            - 'qid': Query ID.
+            - 'qid': Query ID (if include_docids_and_scores is True).
             - 'question': Query text.
             - 'positive_ctxs': List of positive contexts (relevant documents).
             - 'hard_negative_ctxs': List of hard negative contexts (irrelevant but similar documents).
+    
     Raises:
         ValueError: If `range_max` is less than `num_hard_negatives`.
         ValueError: If there is a mismatch between the number of query embeddings and the number of query IDs.
+    
     Notes:
         - Hard negatives are documents that are not relevant to the query but are highly similar based on the model's embeddings.
-        - They can be ranked above relevant documents or below, the function will just return the top-k exluding positives.
+        - The function excludes positives and optionally excludes negatives that are too similar to the first positive based on the `relative_margin`.
+        - FAISS is used for efficient similarity search when enabled, with GPU support if available.
+        - Multi-process encoding can be used for faster embedding computation, but requires proper configuration of `target_devices`.
     """
 
     if range_max < num_hard_negatives:
@@ -64,9 +72,9 @@ def mine_hard_negatives(
 
     # prepare ordered list of queries and corpus texts
     corpus_ids = list(corpus.keys())
-    corpus_texts = [corpus[doc_id] for doc_id in corpus_ids]
+    corpus_texts = [corpus[doc_id]["title"] + " " + corpus[doc_id]["text"] for doc_id in corpus_ids]
     query_ids = list(relevant_queries.keys())
-    query_texts = [queries[query_id] for query_id in query_ids]
+    query_texts = [queries[query_id]["text"] for query_id in query_ids]
     
     # conversion maps between doc_id and index. will be used since faiss returns indices
     corpus_id_to_index = {doc_id: idx for idx, doc_id in enumerate(corpus_ids)}
@@ -106,9 +114,15 @@ def mine_hard_negatives(
             convert_to_numpy=True,
             show_progress_bar=True
         )
-        
 
-    k = min(range_max + max_positives, len(corpus_embeddings))
+    effective_range_max = range_max + max_positives
+
+    if effective_range_max > 2048 and use_faiss:
+        range_max = 2048 # faiss gpu can only retrieve up to 2048 documents per query
+        if verbose:
+            print("Using FAISS, we can only retrieve up to 2048 documents per query. Setting range_max to 2048.")
+    
+    k = min(effective_range_max, len(corpus_embeddings))
     if verbose:
         print(f"Searching for {k} most similar documents per query. This is given by the range_max ({range_max}) parameter + the maximum number of positives per query ({max_positives}).")
 
@@ -155,18 +169,39 @@ def mine_hard_negatives(
     if indices.shape[0] != len(query_ids):
         raise ValueError(f"Mismatch between indices rows ({indices.shape[0]}) and query_ids ({len(query_ids)}).")
     
+    skipped_because_of_relative_margin = 0
+    actual_hard_negatives = 0
+
     for query_idx, query_id in enumerate(tqdm(query_ids, desc="Processing queries", unit="query")):
         positive_docids = set(qrels.get(query_id, {}).keys())
         # print("Positive docids for this query: ", positive_docids)
+        first_positive_score = None
+
         query_hard_negatives = []
         for score_idx, indice in enumerate(indices[query_idx]):
             
             # convert from faiss index to corpus id
             doc_id = index_to_corpus_id[indice]
 
+            # exclude based on relative_margin: if set, we have to get the easier positive when we first meet it
+            if relative_margin is not None and first_positive_score is None and doc_id in positive_docids:
+                first_positive_score = float(scores[query_idx][score_idx])
+                continue
+            elif relative_margin is not None and first_positive_score is None and doc_id not in positive_docids: 
+                # this means we're elaborating negatives ranked higher than the first positive
+                # if the relative_margin is set these have for sure to be excluded
+                skipped_because_of_relative_margin += 1
+                continue
+
             # exclude positives 
             if doc_id not in positive_docids and len(query_hard_negatives) < num_hard_negatives:
+
+                # exclude based on margin
+                if relative_margin is not None and relative_margin > 0.0 and scores[query_idx][score_idx].item() >= ((1-relative_margin) * first_positive_score):
+                    skipped_because_of_relative_margin += 1
+                    continue
                 
+                # include the document in the hard_negatives
                 hard_negative = {}
                 if include_docids_and_scores:
                     hard_negative['docid'] = doc_id
@@ -175,6 +210,7 @@ def mine_hard_negatives(
                     'title': corpus[doc_id]['title'],
                     'text': corpus[doc_id]['text']
                 })
+                actual_hard_negatives += 1
                 query_hard_negatives.append(hard_negative)
         
         positive_contexts = []
@@ -202,5 +238,11 @@ def mine_hard_negatives(
         })
 
         queries_with_hard_negatives[query_id] = entry
-    
+
+    if verbose:
+        print(f"Found {len(queries_with_hard_negatives)} queries with hard negatives. This is the {len(queries_with_hard_negatives) / len(relevant_queries) * 100:.2f}% of the queries.")
+        print(f"Found {actual_hard_negatives} hard negatives, so there's a mean of {actual_hard_negatives / len(queries_with_hard_negatives):.2f} hard negatives per query.")
+        if relative_margin is not None:
+            print(f"Excluding {skipped_because_of_relative_margin} potential negatives based on relative margin.")
+
     return queries_with_hard_negatives

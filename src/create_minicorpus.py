@@ -55,6 +55,6 @@ def create_minicorpus(dataset_name: str, beir_directory: str = "beir_datasets", 
 
 
 if __name__ == "__main__": # example usage
-    dataset_name = "fever"
+    dataset_name = "INSERT_DATASET_NAME_HERE"
     beir_directory = "beir_datasets" 
     create_minicorpus(dataset_name, beir_directory, 0.1) # 10% of the original corpus

@@ -6,6 +6,7 @@ import beir.util
 import argparse
 from tqdm import tqdm
 from src.mine_hard_negatives import mine_hard_negatives
+from src.split_into_training_dev import split_qrels
 
 
 def load_jsonl(file_path):
@@ -62,6 +63,7 @@ def prepare_dataset_with_negatives(
     # hard negatives parameters
     model: SentenceTransformer = None,
     num_hard_negatives: int = None,
+    relative_margin: float = None,
     use_faiss: bool = True,
     use_multi_process: bool = False,
     range_max: int = 30,               
@@ -69,14 +71,6 @@ def prepare_dataset_with_negatives(
 ) -> None:
     
     target_path = os.path.join(data_path, dataset_name)
-    if not os.path.isdir(target_path):
-        print(f"{dataset_name} not present locally. Downloading and extracting it.")
-        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset_name)
-        data_path = beir.util.download_and_unzip(url, data_path)
-        # delete the zip file
-        os.remove(data_path + ".zip")
-        print(f"Downloaded and extracted {dataset_name} to {data_path}.")
-
     queries_path = os.path.join(target_path, "queries.jsonl")
     corpus_path = os.path.join(target_path, "corpus.jsonl")
 
@@ -107,6 +101,7 @@ def prepare_dataset_with_negatives(
             queries, corpus, qrels, 
             model, 
             range_max=range_max, 
+            relative_margin=relative_margin,
             num_hard_negatives=num_hard_negatives,
             use_faiss=use_faiss,
             batch_size=batch_size,
@@ -124,6 +119,7 @@ def prepare_dataset_with_negatives(
     for qid in tqdm(valid_qids, desc="Extracting negatives", unit="queries", total=len(valid_qids)):
         
         # sample random negatives
+        random.seed(42) # reproducibility
         negative_doc_ids =  random.sample(negative_corpus, min(num_negatives, len(negative_corpus)))
         negative_ctxs = []
         for neg_docid in negative_doc_ids:
@@ -135,13 +131,13 @@ def prepare_dataset_with_negatives(
                 entry["docid"] = neg_docid
             negative_ctxs.append(entry)
         
-        if model is not None and num_hard_negatives > 0:
+        if model is not None and num_hard_negatives > 0 and qid in negative_dataset:
             # if condition is true, the dict has already been updated by src.mine_hard_negatives with question|positive_ctxs|hard_negatives_ctxs
             # just add the random negatives to the entry
             negative_dataset[qid].update({"negative_ctxs" : negative_ctxs})
             continue
         
-        else: # otherwise create the entry from scratch
+        else: # otherwise create the entry from scratch (no hard negatives)
             relevant_docs = qrels[qid]
             query_text = queries[qid]["text"]
             
@@ -179,14 +175,34 @@ def main(args):
 
     model = SentenceTransformer(args.model_name)
 
+    target_path = os.path.join(args.data_path, args.dataset_name)
+    if not os.path.isdir(target_path):
+        print(f"{args.dataset_name} not present locally. Downloading and extracting it.")
+        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(args.dataset_name)
+        data_path = beir.util.download_and_unzip(url, args.data_path)
+        # delete the zip file
+        os.remove(data_path + ".zip")
+        print(f"Downloaded and extracted {args.dataset_name} to {data_path}.")
+
+    # if the dev qrels doesn't exist, create them with the util 'split_dataset' (80/20 split on the train qrels)
+    dev_qrels_path = os.path.join("beir_datasets", args.dataset_name, "qrels/dev.tsv")
+    if not os.path.exists(dev_qrels_path):
+        print(f"Dev qrels not found for {args.dataset_name}. Splitting the training qrels into train/dev.")
+        train_qrels_path = os.path.join("beir_datasets", args.dataset_name, "qrels/train.tsv")
+        split_qrels(train_qrels_path, dev_qrels_path, split_ratio=0.8)
+    
+
     # training data with negatives and hard negatives
     prepare_dataset_with_negatives(
         dataset_name= args.dataset_name,
         target = "train",
+        data_path=args.data_path,
         output_file=f"beir_datasets/{args.dataset_name}/training_data.jsonl",
         model=model,
         num_negatives=args.num_negatives,
+        # hard negatives parameters
         num_hard_negatives=args.num_hard_negatives,
+        relative_margin=args.relative_margin,
         range_max=args.range_max,
         batch_size=args.batch_size,
         use_faiss=args.use_faiss,
@@ -202,21 +218,18 @@ def main(args):
     prepare_dataset_with_negatives(
         dataset_name= args.dataset_name,
         target = "dev",
+        data_path=args.data_path,
         output_file=f"beir_datasets/{args.dataset_name}/dev_data.jsonl",
-         model=model,
+        model=None,  # no hard negatives for dev data
         num_negatives=args.num_negatives,
-        num_hard_negatives=args.num_hard_negatives,
-        range_max=args.range_max,
-        batch_size=args.batch_size,
-        use_faiss=args.use_faiss,
-        use_multi_process=args.use_multi_process,
-        include_docids_and_scores=args.include_docids_and_scores,
+        num_hard_negatives=0
     )
     
     # test data
     prepare_dataset_with_negatives(
         dataset_name= args.dataset_name,
         target = "test",
+        data_path=args.data_path,
         output_file=f"beir_datasets/{args.dataset_name}/test_data.jsonl",
         model=None,  # no hard negatives for test data
         num_negatives=args.num_negatives,
@@ -229,9 +242,12 @@ if __name__ == "__main__":
     # Load the SentenceTransformer model -> https://huggingface.co/nthakur/contriever-base-msmarco
     parser.add_argument("--model_name", type=str, help="SentenceTransformer model name", default="nthakur/contriever-base-msmarco")
     parser.add_argument("--dataset_name", type=str, help="Evaluation dataset from the BEIR benchmark")
+    parser.add_argument("--data_path", type=str, default="./beir_datasets", help="Directory to save and load beir datasets")
     parser.add_argument("--num_negatives", type=int, help="Number of random negative documents per query", default=5)
     # hard negatives parameters
     parser.add_argument("--num_hard_negatives", type=int, help="Number of hard negative documents per query", default=5)
+    parser.add_argument("--relative_margin", type=float, help="Defines a margin to exclude candidates that are too similar to the positive document. " \
+        "For example, a relative_margin of 0.1 ensures that hard negatives are at most 90% as similar to the query as the positive document.", default=0.0)
     parser.add_argument("--range_max", type=int, help="Maximum rank of the closest matches to consider as negatives", default=None)
     parser.add_argument("--batch_size", type=int, help="Batch size for mining hard negatives", default=32)
     parser.add_argument("--use_faiss", action="store_true", help="Use FAISS for efficient similarity search")

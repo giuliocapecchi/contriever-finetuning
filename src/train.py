@@ -111,14 +111,14 @@ def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
 
         # if used, check if the minicorpus exists. otherwise, create it
         if opt.use_minicorpus and not os.path.exists(os.path.join(opt.eval_datasets_dir, datasetname, "minicorpus.jsonl")):
-            logger.warning(f"Minicorpus for {datasetname} not found but your configuration requires it. Creating it with default values (0.1% of original rows)")
+            logger.warning(f"Minicorpus for {datasetname} not found but your configuration requires it. Creating it with default values. (train.py)")
             
             from src import create_minicorpus
 
             create_minicorpus.create_minicorpus(
                 dataset_name=datasetname,
                 beir_directory=opt.eval_datasets_dir,
-                sample_size=0.1
+                sample_size= 0.1 if datasetname not in ["nq", "nq-train", "fever", "hotpotqa", ] else 100000, # 0.1% of original rows for the smaller datasets
             )
 
         logger.info(f"Evaluating {datasetname}..." if not opt.use_minicorpus else f"Evaluating {datasetname} (minicorpus)...")
