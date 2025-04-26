@@ -182,7 +182,7 @@ def evaluate_model(
         results = retriever.retrieve(corpus, queries)
         if is_main:
             ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
-            for metric in (ndcg, _map, recall, precision, "mrr", "recall_cap", "hole"):
+            for metric in (ndcg, _map, recall, precision): # "mrr", "recall_cap", "hole"
                 if isinstance(metric, str):
                     metric = retriever.evaluate_custom(qrels, results, retriever.k_values, metric=metric)
                 for key, value in metric.items():
@@ -201,7 +201,7 @@ def evaluate_model(
             results = retriever.retrieve(corpus, queries)
             if is_main:
                 ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
-                for metric in (ndcg, _map, recall, precision, "mrr", "recall_cap", "hole"):
+                for metric in (ndcg, _map, recall, precision): # "mrr", "recall_cap", "hole"
                     if isinstance(metric, str):
                         metric = retriever.evaluate_custom(qrels, results, retriever.k_values, metric=metric)
                     for key, value in metric.items():
