@@ -43,6 +43,8 @@ if [[ -n "${LORA_ADAPTER_PATH}" ]]; then # if 'LORA_ADAPTER_PATH' is defined, ev
         --output_dir $LORA_ADAPTER_PATH \
         --per_gpu_batch_size $PER_GPU_BATCH_SIZE
 
+    # Update LORA_ADAPTER_PATH to include the wildcard
+    LORA_ADAPTER_PATH=$(echo $LORA_ADAPTER_PATH | awk -F'/' '{OFS="/"; $NF="*" $NF; print}')
     echo "Creating table with results for "$DATASET" in "$LORA_ADAPTER_PATH", confronting the base model with LoRA"
     python ./beir_results/visualize_results.py --dataset $DATASET --results_folder $LORA_ADAPTER_PATH
 fi
@@ -58,7 +60,9 @@ if [[ -n "${FINETUNED_BASEMODEL_CHECKPOINT}" ]]; then # if 'FINETUNED_BASEMODEL_
         --save_results_path $FINETUNED_BASEMODEL_CHECKPOINT \
         --output_dir $FINETUNED_BASEMODEL_CHECKPOINT \
         --per_gpu_batch_size $PER_GPU_BATCH_SIZE
-
+    
+    # Update FINETUNED_BASEMODEL_CHECKPOINT to include the wildcard
+    FINETUNED_BASEMODEL_CHECKPOINT=$(echo $FINETUNED_BASEMODEL_CHECKPOINT | awk -F'/' '{OFS="/"; $NF="*" $NF; print}')
     echo "Creating table with results for "$DATASET" in "$FINETUNED_BASEMODEL_CHECKPOINT", confronting the base model with the fine-tuned model"
     python ./beir_results/visualize_results.py --dataset $DATASET --results_folder $FINETUNED_BASEMODEL_CHECKPOINT
 fi

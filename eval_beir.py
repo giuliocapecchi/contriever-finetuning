@@ -31,9 +31,8 @@ def main(args):
 
     logger = src.utils.init_logger(args)
 
-    # model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
-    model, tokenizer, _ = src.contriever.load_retriever(model_path='facebook/contriever-msmarco')
-
+    model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
+    
     options = Options()
     opt = options.parse()
     model = inbatch.InBatch(opt, model, tokenizer)
@@ -89,6 +88,22 @@ def main(args):
         for key, value in metrics.items():
             logger.info(f"{args.dataset} : {key}: {value:.1f}")
 
+    if args.lora_adapter_path is not None:
+        logger.info(f"LoRA adapter path: {args.lora_adapter_path}")
+        parts = args.lora_adapter_path.split("/")
+        parts[-1] = "*" + parts[-1]
+        updated_path = "/".join(parts)
+        os.rename(args.lora_adapter_path, updated_path)
+        logger.info(f"Updated LoRA adapter path: {updated_path}")
+    else: 
+        logger.info(f"Finetuned base-model checkpoint path: {args.finetuned_basemodel_checkpoint}")
+        parts = args.finetuned_basemodel_checkpoint.split("/")
+        parts[-1] = "*" + parts[-1]
+        updated_path = "/".join(parts)
+        os.rename(args.finetuned_basemodel_checkpoint, updated_path)
+        logger.info(f"Updated finetuned base-model path: {updated_path}")
+    
+            
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
