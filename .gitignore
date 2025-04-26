@@ -187,6 +187,8 @@ dbpedia*
 climate-fever*
 vihealth*
 
+hard_negatives_distribution
+avm_requirements.txt 
 
 checkpoint
 
