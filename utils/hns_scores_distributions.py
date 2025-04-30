@@ -33,7 +33,7 @@ def main():
     num_examples = args.num_examples
     data_path = f"./beir_datasets/{dataset}/training_data.jsonl"
     model_path = "facebook/contriever-msmarco"
-    plot_save_folder = f"./check_hn/hard_negatives_distribution/{dataset}"
+    plot_save_folder = f"./utils/hard_negatives_distribution/{dataset}"
 
     use_cuda = torch.cuda.is_available()
 
