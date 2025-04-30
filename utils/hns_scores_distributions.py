@@ -22,7 +22,7 @@ def embed(texts, tokenizer, retriever, use_cuda):
         batch = {k: v.cuda() for k, v in batch.items()}
     with torch.no_grad():
         embeddings = retriever(**batch)
-        # embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=-1)
+        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=-1)
     return embeddings
 
 def main():
