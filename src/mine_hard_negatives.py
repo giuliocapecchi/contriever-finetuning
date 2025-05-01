@@ -1,9 +1,8 @@
-from sentence_transformers import SentenceTransformer
-import torch
-from typing import Dict, List, Any
 import numpy as np
+import torch
+from sentence_transformers import SentenceTransformer, SimilarityFunction
 from tqdm import tqdm
-from typing import Literal
+from typing import Any, Dict, List, Literal
 
 
 def mine_hard_negatives(
@@ -86,7 +85,7 @@ def mine_hard_negatives(
     index_to_corpus_id = {idx: doc_id for doc_id, idx in corpus_id_to_index.items()} # simply inverse the above mapping
     
     max_positives = max(positives_per_query)
-
+    model.similarity_fn_name = SimilarityFunction.DOT_PRODUCT
 
     # embed the corpus and the queries
     if use_multi_process: # from SentenceTransformer documentation: first create a pool, then embed documents, finally model.stop_multi_process_pool(pool)
@@ -95,10 +94,10 @@ def mine_hard_negatives(
             target_devices=target_devices,
         )
         query_embeddings = model.encode_multi_process(
-            query_texts, pool, batch_size=batch_size, normalize_embeddings=True, show_progress_bar=True
+            query_texts, pool, batch_size=batch_size, normalize_embeddings=False, show_progress_bar=True
         )
         corpus_embeddings = model.encode_multi_process(
-            corpus_texts, pool, batch_size=batch_size, normalize_embeddings=True, show_progress_bar=True
+            corpus_texts, pool, batch_size=batch_size, normalize_embeddings=False, show_progress_bar=True
         )
         model.stop_multi_process_pool(pool)
 
@@ -108,7 +107,7 @@ def mine_hard_negatives(
         query_embeddings = model.encode(
             query_texts,
             batch_size=batch_size,
-            normalize_embeddings=True,
+            normalize_embeddings=False,
             convert_to_numpy=True,
             show_progress_bar=True,
             device=model.device
@@ -116,7 +115,7 @@ def mine_hard_negatives(
         corpus_embeddings = model.encode(
             corpus_texts,
             batch_size=batch_size,
-            normalize_embeddings=True,
+            normalize_embeddings=False,
             convert_to_numpy=True,
             show_progress_bar=True,
             device=model.device
@@ -127,7 +126,7 @@ def mine_hard_negatives(
 
     if relative_margin:  # check for the ["min", "max", "mean"] positive score for each query
         positive_scores = {}
-        for query_id in tqdm(query_ids, desc="Calculating positive scores for each query...", unit="query"):
+        for query_id in tqdm(query_ids, desc=f"Calculating ({positive_score_to_use}) positive scores for each query...", unit="query"):
             positive_docids = set(qrels.get(query_id, {}).keys())
             scores = []
             for doc_id in positive_docids:
@@ -271,6 +270,7 @@ def mine_hard_negatives(
             positive_context = {}
             if include_docids_and_scores:
                 positive_context['docid'] = doc_id
+                positive_context['maxpos_score'] = round(positive_scores[query_id], 3)
             positive_context.update({
                 'title': corpus[doc_id]['title'], 
                 'text': corpus[doc_id]['text']

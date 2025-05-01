@@ -55,7 +55,7 @@ def split_qrels(input_train_file, output_dev_file, split_ratio=0.8):
     # rename the input file to indicate that it's the full train qrels set
     os.rename(input_train_file, input_train_file.replace('.tsv', '_full.tsv'))
     with open(input_train_file, 'w', encoding='utf-8') as f:
-        f.write("query-id1\tcorpus-id\tscore\n")
+        f.write("query-id\tcorpus-id\tscore\n")
         f.writelines(train_qrels)
 
     print(f"Dataset split by query into {len(train_queries)} train queries and {len(dev_queries)} dev queries.")

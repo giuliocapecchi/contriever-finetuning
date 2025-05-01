@@ -22,7 +22,6 @@ def embed(texts, tokenizer, retriever, use_cuda):
         batch = {k: v.cuda() for k, v in batch.items()}
     with torch.no_grad():
         embeddings = retriever(**batch)
-        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=-1)
     return embeddings
 
 def main():
@@ -98,9 +97,9 @@ def main():
             neg_over_pos += 1
         if max_hard_score > max_pos_score:
             hard_over_pos += 1
-            print(f"\nQuery: {query}")
-            print(f"Positive: {pos_texts[pos_scores.argmax()]}")
-            print(f"Hard Negative: {hard_texts[hard_scores.argmax()]}")
+            print(f"\nFound a hard negative with higher score than the positive!\nQuery: {query}")
+            print(f"Positive: {pos_texts[pos_scores.argmax()][:50]}")
+            print(f"Hard Negative: {hard_texts[hard_scores.argmax()][:50]}")
             print()
 
     total_examples = len(lines)
