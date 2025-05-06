@@ -95,7 +95,7 @@ def main(args):
         updated_path = "/".join(parts)
         os.rename(args.lora_adapter_path, updated_path)
         logger.info(f"Updated LoRA adapter path: {updated_path}")
-    else: 
+    elif args.finetuned_basemodel_checkpoint is not None: 
         logger.info(f"Finetuned base-model checkpoint path: {args.finetuned_basemodel_checkpoint}")
         parts = args.finetuned_basemodel_checkpoint.split("/")
         parts[-1] = "*" + parts[-1]

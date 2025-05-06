@@ -26,8 +26,13 @@ def main(args):
     # extract metrics (they're the same for both models)
     metrics = contriever_results.keys()
 
-    table = "| Metric | Contriever | LoRA |\n"
-    table += "|--------|------------|------|\n"
+    if "lora" in args.results_folder.lower():
+        table = "| Metric   |   Contriever  | Lora          |\n"
+    else:
+        table = "| Metric   |   Contriever  | full-finetune |\n"
+
+
+    table += "|----------|---------------|---------------|\n"
 
     for metric in metrics:
         contriever_metric_value = contriever_results[metric]

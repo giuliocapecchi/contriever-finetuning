@@ -249,6 +249,13 @@ def mine_hard_negatives(
                     skipped_because_of_relative_margin += 1
                     continue
                 
+
+                # check if the document is already in query_hard_negatives (might happen if the corpus has duplicates)
+                if corpus[doc_id]['title'] in [d['title'] for d in query_hard_negatives]:
+                    if verbose:
+                        print(f"Warning: Document {doc_id} already in query_hard_negatives. Skipping.")
+                    continue
+
                 # include the document in the hard_negatives
                 hard_negative = {}
                 if include_docids_and_scores:
