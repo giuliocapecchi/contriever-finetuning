@@ -277,7 +277,8 @@ def mine_hard_negatives(
             positive_context = {}
             if include_docids_and_scores:
                 positive_context['docid'] = doc_id
-                positive_context['maxpos_score'] = round(positive_scores[query_id], 3)
+                if relative_margin:
+                    positive_context['pos_score'] = round(positive_scores[query_id], 3)
             positive_context.update({
                 'title': corpus[doc_id]['title'], 
                 'text': corpus[doc_id]['text']

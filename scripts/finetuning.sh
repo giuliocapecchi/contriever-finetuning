@@ -62,7 +62,7 @@ USE_RSLORA=True
 INIT_LORA_WEIGHTS=pissa
 
 
-if [[ -n "${LORA_R}" ]]; then # if 'LORA_R' is defined, finetune the model with LoRA
+ if [[ -n "${LORA_R}" ]]; then # if 'LORA_R' is defined, finetune the model with LoRA
 
 OUTPUT_DIR=beir_results/$DATASET/lora_experiment_$(date +%m%d-%H%M)
 echo "Finetuning with LoRA. Results will be saved inside $OUTPUT_DIR"
@@ -97,9 +97,8 @@ python ./finetuning.py \
 --eval_datasets $DATASET \
 --eval_split dev \
 --use_minicorpus \
---norm_doc True \
---norm_query True     
-
+--norm_doc \
+--norm_query     
 
 else # if 'LORA_R' is not defined, finetune the model without LoRA
 
@@ -132,7 +131,7 @@ python ./finetuning.py \
 --eval_datasets $DATASET \
 --eval_split dev \
 --use_minicorpus \
---norm_doc True \
---norm_query True     
+--norm_doc \
+--norm_query     
 
 fi

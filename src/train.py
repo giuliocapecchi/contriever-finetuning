@@ -118,7 +118,7 @@ def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
             create_minicorpus.create_minicorpus(
                 dataset_name=datasetname,
                 beir_directory=opt.eval_datasets_dir,
-                sample_size= 0.1 if datasetname not in ["nq", "nq-train", "fever", "hotpotqa", ] else 200000, # 0.1% of original rows for the smaller datasets
+                sample_size= 0.1
             )
 
         logger.info(f"Evaluating {datasetname}..." if not opt.use_minicorpus else f"Evaluating {datasetname} (minicorpus)...")
