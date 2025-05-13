@@ -103,9 +103,6 @@ def train(opt, model, optimizer, scheduler, step):
 
 def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
     
-    query_encoder = query_encoder.get_encoder()
-    if doc_encoder is not None:
-            doc_encoder = doc_encoder.get_encoder()
     
     for datasetname in opt.eval_datasets:
 
@@ -146,6 +143,12 @@ def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
                     tb_logger.add_scalar(f"eval/{datasetname}/{metric}", metrics[metric], step)
             logger.info(" | ".join(message))
 
+        if opt.early_stopping_metric is not None:
+            if opt.early_stopping_metric in metrics:
+                return metrics[opt.early_stopping_metric]
+            else:
+                logger.warning(f"Early stopping metric {opt.early_stopping_metric} not found in metrics. Skipping early stopping check.")
+                return None
 
 if __name__ == "__main__":
     logger.info("Start")
@@ -154,9 +157,6 @@ if __name__ == "__main__":
     opt = options.parse()
 
     torch.manual_seed(opt.seed)
-    # Remove SLURM initialization
-    # slurm.init_distributed_mode(opt)
-    # slurm.init_signal_handler()
 
     directory_exists = os.path.isdir(opt.output_dir)
     if dist.is_initialized():

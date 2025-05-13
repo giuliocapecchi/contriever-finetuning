@@ -26,18 +26,9 @@ logger = logging.getLogger(__name__)
 
 def main(args):
 
-    # src.slurm.init_distributed_mode(args)
-    # src.slurm.init_signal_handler()
-
     logger = src.utils.init_logger(args)
-
     model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
     
-    options = Options()
-    opt = options.parse()
-    model = inbatch.InBatch(opt, model, tokenizer)
-
-
     # load LoRA module
     if args.lora_adapter_path is not None and args.finetuned_basemodel_checkpoint is None:
         if not os.path.exists(args.lora_adapter_path):
@@ -60,8 +51,8 @@ def main(args):
 
     model = model.cuda()
     model.eval()
-    query_encoder = model.encoder
-    doc_encoder = model.encoder
+    query_encoder = model
+    doc_encoder = model
 
     logger.info("Model loaded")
 

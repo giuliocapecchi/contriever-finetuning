@@ -104,10 +104,14 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
     logger.info(f"Number of training samples: {len(train_dataset)}")
     
     # consider that train.eval_model will have an effect only if opt.eval_datasets is non-empty
-    train.eval_model(opt, model, None, tokenizer, tb_logger, step)
+    train.eval_model(opt, model.get_encoder(), None, tokenizer, tb_logger, step)
     evaluate(opt, model, tokenizer, tb_logger, step) # evaluate the model before training
 
     epoch = 1
+    if opt.early_stopping_metric is not None:
+        best_score = 0
+        patience_counter = 0
+        best_step = 0
 
     model.train()
 
@@ -149,15 +153,15 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
             if step % opt.eval_freq == 0: # evaluation
 
-                train.eval_model(opt, model, None, tokenizer, tb_logger, step)
+                new_score = train.eval_model(opt, model.get_encoder(), None, tokenizer, tb_logger, step)
                 evaluate(opt, model, tokenizer, tb_logger, step)
 
                 if step % opt.save_freq == 0 and dist_utils.get_rank() == 0: # model checkpoint
                     if opt.use_lora: # if LoRA is applied, save the LoRA module
-                        save_lora_model(model, optimizer, scheduler, opt.output_dir, opt, step)
+                        save_lora_model(model.get_encoder(), optimizer, scheduler, opt.output_dir, opt, step)
                     else: # otherwise, save the whole finetuned model
                         utils.save(
-                        model,
+                        model.get_encoder(),
                         optimizer,
                         scheduler,
                         step,
@@ -166,6 +170,20 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                         f"step-{step}",
                         )
                     logger.info(f"Saved model at step {step}")
+
+                if opt.early_stopping_metric is not None:
+                    if new_score > best_score + opt.early_stopping_delta:
+                        best_score = new_score
+                        best_step = step
+                        patience_counter = 0
+                        logger.info(f"[EARLY STOPPING] New best metric ({opt.early_stopping_metric}): {best_score} at step {best_step}")
+                    else:
+                        patience_counter += 1
+                        logger.info(f"{opt.early_stopping_metric} did not improve. Patience counter: {patience_counter}/{opt.early_stopping_patience}")
+                        if patience_counter >= opt.early_stopping_patience:
+                            logger.info(f"Early stopping at step {step}. Best {opt.early_stopping_metric}: {best_score}, from step: {best_step})")
+                            return
+
                 model.train()
 
             if step >= opt.total_steps:
@@ -274,10 +292,6 @@ def main():
 
     torch.manual_seed(opt.seed)
 
-    # Removed SLURM initialization
-    # slurm.init_distributed_mode(opt)
-    # slurm.init_signal_handler()
-
     directory_exists = os.path.isdir(opt.output_dir)
     if dist.is_initialized():
         dist.barrier()
@@ -301,7 +315,8 @@ def main():
     # print the number of trainable parameters in the model before and after applying LoRA
     logger.info(utils.get_parameters(model))
     if opt.use_lora:
-        model = apply_lora(model, opt)
+        model.encoder = apply_lora(model.encoder, opt)
+        logger.info(model)
         logger.info(utils.get_parameters(model, using_lora=True))
     model = model.cuda()
 
@@ -328,10 +343,10 @@ def main():
     # save the final model
     if dist_utils.get_rank() == 0 and not opt.total_steps % opt.save_freq == 0:
         if opt.use_lora:
-            save_lora_model(model, optimizer, scheduler, opt.output_dir, opt, step)
+            save_lora_model(model.get_encoder(), optimizer, scheduler, opt.output_dir, opt, step)
         else:
             utils.save(
-                model,
+                model.get_encoder(),
                 optimizer,
                 scheduler,
                 step,

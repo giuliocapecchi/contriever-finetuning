@@ -104,7 +104,12 @@ class Options:
         self.parser.add_argument("--lora_dropout", type=float, default=0.1, help="dropout for LoRA")
         self.parser.add_argument("--init_lora_weights", type=str, default="none", help="Choose between 'gaussian', 'eva', 'olora', 'pissa', 'pissa_niter_[number of iters]', 'loftq'")
         self.parser.add_argument("--lora_target_modules", nargs="+", default=None, help="LoRA target modules")
-        
+
+        # early stopping options
+        self.parser.add_argument("--early_stopping_metric", type=str, default="NDCG@10", help="Metric used for early stopping. If None, no early stopping is performed.")
+        self.parser.add_argument("--early_stopping_patience", type=int, default=5, help="Number of evaluations with no improvement after which training will be stopped.")
+        self.parser.add_argument("--early_stopping_delta", type=float, default=0.1, help="Minimum improvement required to consider the model as improved.")
+
 
     def print_options(self, opt):
         message = ""

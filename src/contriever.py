@@ -27,6 +27,7 @@ class Contriever(BertModel):
         output_attentions=None,
         output_hidden_states=None,
         normalize=False,
+        **kwargs
     ):
 
         model_output = super().forward(
