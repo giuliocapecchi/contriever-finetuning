@@ -4,8 +4,10 @@ import os
 from collections import defaultdict
 from typing import List, Dict
 import numpy as np
+import pytrec_eval
 import torch
 import torch.distributed as dist
+import csv
 
 import beir.util
 from beir.datasets.data_loader import GenericDataLoader
@@ -141,6 +143,7 @@ def evaluate_model(
     save_torch_results=None,
     lower_case=False,
     normalize_text=False,
+    save_perquery_scores=False,
 ):
 
     metrics = defaultdict(list)  # store final results
@@ -180,6 +183,22 @@ def evaluate_model(
     if not dataset == "cqadupstack":
         corpus, queries, qrels = GenericDataLoader(data_folder=data_path, corpus_file="minicorpus.jsonl" if use_minicorpus else "corpus.jsonl").load(split=split)
         results = retriever.retrieve(corpus, queries)
+
+        if save_perquery_scores and is_main:
+            map_string = "map_cut." + ",".join([str(k) for k in retriever.k_values])
+            ndcg_string = "ndcg_cut." + ",".join([str(k) for k in retriever.k_values])
+            recall_string = "recall." + ",".join([str(k) for k in retriever.k_values])
+            precision_string = "P." + ",".join([str(k) for k in retriever.k_values])
+            evaluator = pytrec_eval.RelevanceEvaluator(qrels, {map_string, ndcg_string, recall_string, precision_string})
+            scores = evaluator.evaluate(results) # these are the scores query by query
+            with open(os.path.join(save_results_path, "perquery_scores.csv"), "w") as f:
+                writer = csv.writer(f)
+                header = ["query_id"] + list(next(iter(scores.values())).keys())
+                writer.writerow(header)
+                for qid, values in scores.items():
+                    row = [qid] + [values[k] for k in header[1:]]
+                    writer.writerow(row)
+
         if is_main:
             ndcg, _map, recall, precision = retriever.evaluate(qrels, results, retriever.k_values)
             for metric in (ndcg, _map, recall, precision): # "mrr", "recall_cap", "hole"

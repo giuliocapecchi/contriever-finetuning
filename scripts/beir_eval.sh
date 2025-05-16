@@ -7,17 +7,19 @@
 # LORA_ADAPTER_PATH: Path to a folder containing a LoRA adapter. 
 # FINETUNED_BASEMODEL_CHECKPOINT: Path to a folder containing a checkpoint of a fine-tuned model.
 
-MODEL_NAME_OR_PATH=facebook/contriever-msmarco
-DATASET=DATASET_NAME_HERE # e.g., nfcorpus, hotpotqa, scifact, etc.
+MODEL_NAME_OR_PATH=facebook/contriever-msmarco # e.g. nthakur/contriever-base-msmarco, intfloat/e5-large-v2, sentence-transformers/msmarco-distilbert-base-tas-b 
+MODEL_ID=${MODEL_NAME_OR_PATH##*/}
+DATASET=nfcorpus # dataset in BEIR format, e.g. nfcorpus, hotpotqa, scifact, etc.
 BEIR_DIR=beir_datasets
-save_results_path=./beir_results/${DATASET}/contriever-beir-results/
+
+save_results_path=./beir_results/${MODEL_ID}/${DATASET}/zero-shot-evaluation
 PER_GPU_BATCH_SIZE=128
 
 # LoRA parameters (optional)
-LORA_ADAPTER_PATH=beir_results/hotpotqa/lora_experiment_0405-0202/lora_step-6000
+LORA_ADAPTER_PATH= # path to a folder containing a LoRA adapter
 
 # Finetuned model path (optional)
-FINETUNED_BASEMODEL_CHECKPOINT=beir_results/hotpotqa/finetuned_basemodel_experiment_0405-2025/step-10000
+FINETUNED_BASEMODEL_CHECKPOINT= # path to a folder containing a checkpoint of a fine-tuned model
 
 
 
@@ -25,7 +27,7 @@ FINETUNED_BASEMODEL_CHECKPOINT=beir_results/hotpotqa/finetuned_basemodel_experim
 
 if [[ ! -d "${save_results_path}" ]]; then # if the base-model evaluation folder does not exist, perform the evaluation
     echo "Evaluating basemodel"
-    mkdir -p ./beir_results/${DATASET}/contriever-beir-results/
+    mkdir -p ./beir_results/${DATASET}/zero-shot-evaluation
     python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --beir_dir $BEIR_DIR --save_results_path $save_results_path --output_dir $save_results_path --per_gpu_batch_size $PER_GPU_BATCH_SIZE
 else
     echo "Base model evaluation already performed and saved in ${save_results_path}.txt"
@@ -65,4 +67,14 @@ if [[ -n "${FINETUNED_BASEMODEL_CHECKPOINT}" ]]; then # if 'FINETUNED_BASEMODEL_
     FINETUNED_BASEMODEL_CHECKPOINT=$(echo $FINETUNED_BASEMODEL_CHECKPOINT | awk -F'/' '{OFS="/"; $NF="*" $NF; print}')
     echo "Creating table with results for "$DATASET" in "$FINETUNED_BASEMODEL_CHECKPOINT", confronting the base model with the fine-tuned model"
     python ./beir_results/visualize_results.py --dataset $DATASET --results_folder $FINETUNED_BASEMODEL_CHECKPOINT
+fi
+
+
+if [[ -n "${LORA_ADAPTER_PATH}" && -n "${FINETUNED_BASEMODEL_CHECKPOINT}" ]]; then # if both are defined, perform paired t-test
+    echo "Performing paired t-test between LoRA and fine-tuned base model"
+    
+    python src/statistical_tests.py --full-finetuned_model "${FINETUNED_BASEMODEL_CHECKPOINT}/perquery_scores.csv" --lora-finetuned_model "${LORA_ADAPTER_PATH}/perquery_scores.csv" --save_results_path "${LORA_ADAPTER_PATH}"
+
+else
+    echo "No paired t-test performed, as one of the paths is not defined."
 fi

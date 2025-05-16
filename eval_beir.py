@@ -73,6 +73,7 @@ def main(args):
         save_results_path=args.save_results_path,
         lower_case=args.lower_case,
         normalize_text=args.normalize_text,
+        save_perquery_scores=True,
     )
 
     if src.dist_utils.is_main():
