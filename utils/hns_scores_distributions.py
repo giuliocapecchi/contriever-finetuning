@@ -13,15 +13,19 @@ from src.contriever import load_retriever
 def parse_args():
     parser = argparse.ArgumentParser(description="Check hard negatives distribution")
     parser.add_argument("--dataset", type=str, required=True, help="Beir dataset name (e.g., 'nfcorpus', 'hotpotqa', 'scifact', ...)")
+    parser.add_argument("--model_name", type=str, default="facebook/contriever-msmarco", help="Model name or path")
     parser.add_argument("--num_examples", type=int, default=1000, help="Number of examples to check")
+    parser.add_argument("--normalize_embeddings", action="store_true", help="Whether to normalize embeddings")
     return parser.parse_args()
 
-def embed(texts, tokenizer, retriever, use_cuda):
+def embed(texts, tokenizer, retriever, normalize_embeddings, use_cuda):
     batch = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
     if use_cuda:
         batch = {k: v.cuda() for k, v in batch.items()}
     with torch.no_grad():
         embeddings = retriever(**batch)
+    if normalize_embeddings:
+        embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
     return embeddings
 
 def main():
@@ -30,15 +34,15 @@ def main():
 
     dataset = args.dataset
     num_examples = args.num_examples
-    data_path = f"./beir_datasets/{dataset}/training_data.jsonl"
-    model_path = "facebook/contriever-msmarco"
-    plot_save_folder = f"./utils/hard_negatives_distribution/{dataset}"
+    data_path = f"./beir_datasets/{dataset}/{args.model_name.split('/')[-1]}/training_data.jsonl"
+    plot_save_folder = f"./utils/hard_negatives_distribution/{dataset}/{args.model_name.split('/')[-1]}/"
 
     use_cuda = torch.cuda.is_available()
 
     # load model
-    retriever, tokenizer, _ = load_retriever(model_path, random_init=False)
+    retriever, tokenizer, _ = load_retriever(args.model_name, random_init=False)
     retriever.eval()
+
     if use_cuda:
         retriever = retriever.cuda()
 
@@ -75,11 +79,19 @@ def main():
         neg_texts = [n["title"] + " " + n["text"] for n in ex["negative_ctxs"]]
         hard_texts = [h["title"] + " " + h["text"] for h in ex["hard_negative_ctxs"]]
 
-        query_emb = embed([query], tokenizer, retriever, use_cuda)
+        if args.model_name == "intfloat/e5-large-v2": # add 'query:' and 'passage:' prefixes
+            query = "query: " + query
+            pos_texts = ["passage: " + text for text in pos_texts]
+            neg_texts = ["passage: " + text for text in neg_texts]
+            hard_texts = ["passage: " + text for text in hard_texts]
 
-        pos_embs = embed(pos_texts, tokenizer, retriever, use_cuda)
-        neg_embs = embed(neg_texts, tokenizer, retriever, use_cuda)
-        hard_embs = embed(hard_texts, tokenizer, retriever, use_cuda)
+
+        query_emb = embed([query], tokenizer, retriever, args.normalize_embeddings, use_cuda)
+
+        pos_embs = embed(pos_texts, tokenizer, retriever, args.normalize_embeddings, use_cuda)
+        neg_embs = embed(neg_texts, tokenizer, retriever, args.normalize_embeddings, use_cuda)
+        hard_embs = embed(hard_texts, tokenizer, retriever, args.normalize_embeddings, use_cuda)
+    
 
         pos_scores = torch.matmul(pos_embs, query_emb.T).squeeze()
         neg_scores = torch.matmul(neg_embs, query_emb.T).squeeze()

@@ -22,6 +22,7 @@ def mine_hard_negatives(
     use_faiss: bool = True,
     batch_size: int = 64,
     use_multi_process: bool = False,
+    normalize_embeddings: bool = False,
     target_devices: Optional[list[str]] = None,
     verbose = True,
     include_docids_and_scores: bool = False
@@ -107,10 +108,10 @@ def mine_hard_negatives(
             target_devices=target_devices,
         )
         query_embeddings = model.encode_multi_process(
-            query_texts, pool, batch_size=batch_size, normalize_embeddings=False, show_progress_bar=True
+            query_texts, pool, batch_size=batch_size, normalize_embeddings=normalize_embeddings, show_progress_bar=True
         )
         corpus_embeddings = model.encode_multi_process(
-            corpus_texts, pool, batch_size=batch_size, normalize_embeddings=False, show_progress_bar=True
+            corpus_texts, pool, batch_size=batch_size, normalize_embeddings=normalize_embeddings, show_progress_bar=True
         )
         model.stop_multi_process_pool(pool)
 
@@ -120,7 +121,7 @@ def mine_hard_negatives(
         query_embeddings = model.encode(
             query_texts,
             batch_size=batch_size,
-            normalize_embeddings=False,
+            normalize_embeddings=normalize_embeddings,
             convert_to_numpy=True,
             show_progress_bar=True,
             device=str(model.device)
@@ -128,7 +129,7 @@ def mine_hard_negatives(
         corpus_embeddings = model.encode(
             corpus_texts,
             batch_size=batch_size,
-            normalize_embeddings=False,
+            normalize_embeddings=normalize_embeddings,
             convert_to_numpy=True,
             show_progress_bar=True,
             device=str(model.device)

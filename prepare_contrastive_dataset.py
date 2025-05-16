@@ -113,6 +113,7 @@ def prepare_dataset_with_negatives(
             use_faiss=use_faiss,
             batch_size=batch_size,
             use_multi_process=use_multi_process,
+            normalize_embeddings=True if model_name=="intfloat/e5-large-v2" else False,
             include_docids_and_scores=include_docids_and_scores,
         )
 
