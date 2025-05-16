@@ -31,40 +31,52 @@
 # eval_datasets: list of datasets for which to evaluate the model.
 # eval_split: Split to use for evaluation (e.g., dev, test).
 # use_minicorpus: If set, use a mini-corpus for evaluation to speed up the process.
+# score_function: Scoring function to use (e.g., dot, cos_sim).
 
 
-DATASET=INSERT_DATASET_NAME_HERE
-TRAIN_DATA=./beir_datasets/$DATASET/training_data.jsonl
-EVAL_DATA=./beir_datasets/$DATASET/dev_data.jsonl
-MODEL_PATH=facebook/contriever-msmarco
-TOTAL_STEPS=5000 # they used 500000
+DATASET=hotpotqa # dataset in BEIR format, e.g. nfcorpus, hotpotqa, scifact, etc.
+MODEL_PATH=intfloat/e5-large-v2 # e.g., facebook/contriever-msmarco, intfloat/e5-large-v2, sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco, ...
+MODEL_ID=${MODEL_PATH##*/}
+TRAIN_DATA=./beir_datasets/$DATASET/$MODEL_ID/training_data.jsonl
+EVAL_DATA=./beir_datasets/$DATASET/$MODEL_ID/dev_data.jsonl
+TOTAL_STEPS=5000
 SCHEDULER=cosine
-WARMUP_STEPS=500 # they used 20000
-SAVE_FREQ=200 # they used 20000
+WARMUP_STEPS=$(($TOTAL_STEPS / 1000))
+SAVE_FREQ=2500
 LOG_FREQ=10
 EVAL_FREQ=200
-LR=0.00005  # they used 0.00005 
-PER_GPU_BATCH_SIZE=32
-ACCUMULATION_STEPS=2 # they used 64 as batchsize
+LR=0.00005
+PER_GPU_BATCH_SIZE=16
+ACCUMULATION_STEPS=4 # they used 64 as batchsize
 NEGATIVE_CTXS=4
 NEGATIVE_HARD_RATIO=1
 NEGATIVE_HARD_MIN_IDX=0
-T=0.05
+TEMPERATURE=0.05
 CHUNK_LENGTH=256
 LABEL_SMOOTHING=0.1
+
+if [[ "$MODEL_ID" == "e5-large-v2" ]]; then
+    SCORE_FUNCTION="cos_sim"
+    NORM_QUERY="--norm_query"
+    NORM_DOC="--norm_doc"
+else
+    SCORE_FUNCTION="dot"
+    NORM_QUERY=""
+    NORM_DOC=""
+fi
+
 
 # LoRA parameters
 LORA_R=16
 LORA_ALPHA=32
 LORA_DROPOUT=0.1
-LORA_TARGET_MODULES="query,key,value,output.dense,intermediate.dense"
-USE_RSLORA=True
+LORA_TARGET_MODULES="query key value output.dense intermediate.dense"
 INIT_LORA_WEIGHTS=pissa
 
 
- if [[ -n "${LORA_R}" ]]; then # if 'LORA_R' is defined, finetune the model with LoRA
+if [[ -n "${LORA_R}" ]]; then # if 'LORA_R' is defined, finetune the model with LoRA
 
-OUTPUT_DIR=beir_results/$DATASET/lora_experiment_$(date +%m%d-%H%M)
+OUTPUT_DIR=beir_results/$MODEL_ID/$DATASET/lora_experiment_$(date +%m%d-%H%M)
 echo "Finetuning with LoRA. Results will be saved inside $OUTPUT_DIR"
 
 python ./finetuning.py \
@@ -76,7 +88,7 @@ python ./finetuning.py \
 --log_freq $LOG_FREQ \
 --eval_freq $EVAL_FREQ \
 --lr $LR \
---temperature $T \
+--temperature $TEMPERATURE \
 --label_smoothing $LABEL_SMOOTHING \
 --chunk_length $CHUNK_LENGTH \
 --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
@@ -87,22 +99,24 @@ python ./finetuning.py \
 --negative_ctxs $NEGATIVE_CTXS \
 --negative_hard_ratio $NEGATIVE_HARD_RATIO \
 --negative_hard_min_idx $NEGATIVE_HARD_MIN_IDX \
+--score_function $SCORE_FUNCTION \
+$NORM_QUERY \
+$NORM_DOC \
 --use_lora \
 --lora_r $LORA_R \
 --lora_alpha $LORA_ALPHA \
 --lora_dropout $LORA_DROPOUT \
 --lora_target_modules $LORA_TARGET_MODULES \
 --init_lora_weights $INIT_LORA_WEIGHTS \
---use_rslora $USE_RSLORA \
+--use_rslora \
 --eval_datasets $DATASET \
 --eval_split dev \
---use_minicorpus \
---norm_doc \
---norm_query     
+--use_minicorpus
+
 
 else # if 'LORA_R' is not defined, finetune the model without LoRA
 
-OUTPUT_DIR=beir_results/$DATASET/finetuned_basemodel_experiment_$(date +%m%d-%H%M)
+OUTPUT_DIR=beir_results/$MODEL_ID/$DATASET/finetuned_basemodel_experiment_$(date +%m%d-%H%M)
 echo "Finetuning basemodel. Results will be saved inside $OUTPUT_DIR"
 
 DROPOUT=0.1
@@ -117,7 +131,7 @@ python ./finetuning.py \
 --log_freq $LOG_FREQ \
 --eval_freq $EVAL_FREQ \
 --lr $LR \
---temperature $T \
+--temperature $TEMPERATURE \
 --label_smoothing $LABEL_SMOOTHING \
 --chunk_length $CHUNK_LENGTH \
 --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
@@ -128,10 +142,11 @@ python ./finetuning.py \
 --negative_ctxs $NEGATIVE_CTXS \
 --negative_hard_ratio $NEGATIVE_HARD_RATIO \
 --negative_hard_min_idx $NEGATIVE_HARD_MIN_IDX \
+--score_function $SCORE_FUNCTION \
+$NORM_QUERY \
+$NORM_DOC \
 --eval_datasets $DATASET \
 --eval_split dev \
---use_minicorpus \
---norm_doc \
---norm_query     
+--use_minicorpus
 
 fi

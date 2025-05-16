@@ -9,6 +9,7 @@ from src import normalize_text
 class Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
+        model_name,
         datapaths,
         negative_ctxs=1,
         negative_hard_ratio=0.0,
@@ -19,6 +20,7 @@ class Dataset(torch.utils.data.Dataset):
         maxload=None,
         normalize=True,
     ):
+        self.model_name = model_name
         self.negative_ctxs = negative_ctxs
         self.negative_hard_ratio = negative_hard_ratio
         self.negative_hard_min_idx = negative_hard_min_idx
@@ -60,6 +62,12 @@ class Dataset(torch.utils.data.Dataset):
         negatives = [
             n["title"] + " " + n["text"] if ("title" in n and len(n["title"]) > 0) else n["text"] for n in negatives
         ]
+
+        if self.model_name == 'intfloat/e5-large-v2': # for e5, we need to add prefixes "query: " and "passage: " to input texts to avoid performance degradation
+            question = "query: " + question
+            gold = "passage: " + gold
+            negatives = ["passage: " + n for n in negatives]
+
 
         example = {
             "query": self.normalize_fn(question),

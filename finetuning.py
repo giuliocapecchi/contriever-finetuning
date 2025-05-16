@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
+import optuna
 import torch
 import logging
 import numpy as np
@@ -21,9 +22,7 @@ logger = logging.getLogger(__name__)
 def apply_lora(model, opt):
     
     target_modules = opt.lora_target_modules
-    if target_modules is not None and isinstance(target_modules, list):
-        target_modules = target_modules[0].split(",")
-        target_modules = [module.strip() for module in target_modules]
+    target_modules = [module.strip() for module in target_modules]
 
     logger.info(f"Applying LoRA to the following modules: {target_modules}")
 
@@ -31,7 +30,7 @@ def apply_lora(model, opt):
         task_type=TaskType.FEATURE_EXTRACTION,
         r=opt.lora_r,
         lora_alpha=opt.lora_alpha,
-        use_rslora= True if str(opt.use_rslora).lower() == "true" else False,
+        use_rslora= True if opt.use_rslora else False,
         lora_dropout=opt.lora_dropout,
         init_lora_weights=opt.init_lora_weights if opt.init_lora_weights != 'none' else True,
         target_modules=target_modules,
@@ -69,7 +68,7 @@ def save_lora_model(model, optimizer, scheduler, output_dir, opt,  step=None):
     logger.info(f"Saved LoRA model and training state to {fp}")
 
 
-def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
+def finetuning(opt, model, optimizer, scheduler, tokenizer, step, trial=None):
 
     run_stats = utils.WeightedAvgStats()
 
@@ -78,6 +77,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
 
     # load the training data
     train_dataset = finetuning_data.Dataset(
+        model_name=opt.model_path,
         datapaths=opt.train_data,
         negative_ctxs=opt.negative_ctxs,
         training=True,
@@ -156,6 +156,12 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                 new_score = train.eval_model(opt, model.get_encoder(), None, tokenizer, tb_logger, step)
                 evaluate(opt, model, tokenizer, tb_logger, step)
 
+                if trial is not None:
+                    trial.report(new_score, step)
+                    if trial.should_prune():
+                        logger.info(f"Optuna trial pruned at step {step} with score {new_score}")
+                        raise optuna.TrialPruned()
+
                 if step % opt.save_freq == 0 and dist_utils.get_rank() == 0: # model checkpoint
                     if opt.use_lora: # if LoRA is applied, save the LoRA module
                         save_lora_model(model.get_encoder(), optimizer, scheduler, opt.output_dir, opt, step)
@@ -176,26 +182,43 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step):
                         best_score = new_score
                         best_step = step
                         patience_counter = 0
+                        if opt.use_lora:
+                            save_lora_model(model.get_encoder(), optimizer, scheduler, opt.output_dir, opt, step)
+                        else:
+                            utils.save(
+                            model.get_encoder(),
+                            optimizer,
+                            scheduler,
+                            step,
+                            opt,
+                            opt.output_dir,
+                            f"step-{step}",
+                            )
+                        logger.info(f"Saved model at step {step}")
                         logger.info(f"[EARLY STOPPING] New best metric ({opt.early_stopping_metric}): {best_score} at step {best_step}")
                     else:
                         patience_counter += 1
-                        logger.info(f"{opt.early_stopping_metric} did not improve. Patience counter: {patience_counter}/{opt.early_stopping_patience}")
+                        logger.info(f"{opt.early_stopping_metric} did not improve ({new_score} < {best_score}). Patience counter: {patience_counter}/{opt.early_stopping_patience}")
                         if patience_counter >= opt.early_stopping_patience:
                             logger.info(f"Early stopping at step {step}. Best {opt.early_stopping_metric}: {best_score}, from step: {best_step})")
-                            return
+                            return best_step, best_score
 
                 model.train()
 
             if step >= opt.total_steps:
-                break
+                if opt.early_stopping_metric is not None:
+                    return best_step, best_score
+                else:
+                    break
 
         epoch += 1
 
 
 def evaluate(opt, model, tokenizer, tb_logger, step):
-    """ Evaluate the model on the evaluation data"""
+    """ Evaluate the model on the validation data"""
     # first load the evaluation data
     dataset = finetuning_data.Dataset(
+        model_name=opt.model_path,
         datapaths=opt.eval_data,
         normalize=opt.eval_normalize_text,
         global_rank=dist_utils.get_rank(),
@@ -316,7 +339,6 @@ def main():
     logger.info(utils.get_parameters(model))
     if opt.use_lora:
         model.encoder = apply_lora(model.encoder, opt)
-        logger.info(model)
         logger.info(utils.get_parameters(model, using_lora=True))
     model = model.cuda()
 
