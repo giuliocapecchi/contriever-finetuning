@@ -4,9 +4,15 @@ from sentence_transformers import SentenceTransformer
 import os
 import beir.util
 import argparse
+import logging
 from tqdm import tqdm
+from typing import Optional
 from src.mine_hard_negatives import mine_hard_negatives
 from src.split_into_training_dev import split_qrels
+from src import utils
+
+
+logger = logging.getLogger(__name__)
 
 
 def load_jsonl(file_path):
@@ -49,7 +55,7 @@ def create_negative_corpus(qrels, corpus):
         positive_doc_ids = set(relevant_docs.keys())
         negative_corpus -= positive_doc_ids
     
-    print(f"Initial corpus size: {len(corpus)}\nNegative corpus size: {len(negative_corpus)}")
+    logger.info(f"Initial corpus size: {len(corpus)}\nNegative corpus size: {len(negative_corpus)}")
     return list(negative_corpus)
 
 
@@ -61,9 +67,9 @@ def prepare_dataset_with_negatives(
     num_negatives: int = 5, 
     include_docids_and_scores: bool = False,
     # hard negatives parameters
-    model: SentenceTransformer = None,
-    num_hard_negatives: int = None,
-    relative_margin: float = None,
+    model_name: Optional[str] = None,
+    num_hard_negatives: Optional[int] = None,
+    relative_margin: Optional[float] = None,
     use_faiss: bool = True,
     use_multi_process: bool = False,
     range_max: int = 30,               
@@ -81,32 +87,33 @@ def prepare_dataset_with_negatives(
     elif target == "dev":
         qrels_path = os.path.join(target_path, "qrels/dev.tsv")
     else:
-        print("Invalid target")
+        logger.info("Invalid target")
+        return
 
     if not os.path.exists(qrels_path):
-            print(f"{target} qrels not found for {dataset_name}. Skipping")
+            logger.info(f"{target} qrels not found for {dataset_name}. Skipping")
             return
     
     queries = load_jsonl(queries_path)
     corpus = load_jsonl(corpus_path)
     qrels = load_tsv(qrels_path)
 
-    print(f"Loaded {len(queries)} queries, {len(corpus)} documents, and {len(qrels)} qrels for {dataset_name} ({target})")
+    logger.info(f"Loaded {len(queries)} queries, {len(corpus)} documents, and {len(qrels)} qrels for {dataset_name} ({target})")
 
     negative_dataset = {}
 
     # mine hard negatives if a model is provided and num_hard_negatives > 0
-    if model is not None and num_hard_negatives > 0:
+    if model_name is not None and num_hard_negatives is not None and num_hard_negatives > 0:
         negative_dataset = mine_hard_negatives(
             queries, corpus, qrels, 
-            model, 
+            model_name, 
             range_max=range_max, 
             relative_margin=relative_margin,
             num_hard_negatives=num_hard_negatives,
             use_faiss=use_faiss,
             batch_size=batch_size,
             use_multi_process=use_multi_process,
-            include_docids_and_scores=include_docids_and_scores
+            include_docids_and_scores=include_docids_and_scores,
         )
 
     negative_corpus = create_negative_corpus(qrels, corpus)
@@ -114,7 +121,7 @@ def prepare_dataset_with_negatives(
     # filter away queries without qrels
     valid_qids = [qid for qid in qrels if qid in queries]
     
-    print(f"Processing {len(valid_qids)} valid queries")
+    logger.info(f"Processing {len(valid_qids)} valid queries")
 
     for qid in tqdm(valid_qids, desc="Extracting negatives", unit="queries", total=len(valid_qids)):
         
@@ -131,7 +138,7 @@ def prepare_dataset_with_negatives(
                 entry["docid"] = neg_docid
             negative_ctxs.append(entry)
         
-        if model is not None and num_hard_negatives > 0 and qid in negative_dataset:
+        if model_name is not None and num_hard_negatives is not None and num_hard_negatives > 0 and qid in negative_dataset:
             # if condition is true, the dict has already been updated by src.mine_hard_negatives with question|positive_ctxs|hard_negatives_ctxs
             # just add the random negatives to the entry
             negative_dataset[qid].update({"negative_ctxs" : negative_ctxs})
@@ -168,26 +175,27 @@ def prepare_dataset_with_negatives(
   
     
     save_jsonl(negative_dataset, output_file)
-    print(f"Saved {len(negative_dataset)} examples to {output_file}.")
+    logger.info(f"Saved {len(negative_dataset)} examples to {output_file}.")
 
 
 def main(args):
 
-    model = SentenceTransformer(args.model_name)
+    args.output_dir = f"beir_datasets/{args.dataset_name}/{args.model_name.split('/')[-1]}"
 
-    target_path = os.path.join(args.data_path, args.dataset_name)
-    if not os.path.isdir(target_path):
-        print(f"{args.dataset_name} not present locally. Downloading and extracting it.")
+    target_path = os.path.join(args.data_path, args.dataset_name, "corpus.jsonl")
+    if not os.path.isfile(target_path):
         url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(args.dataset_name)
         data_path = beir.util.download_and_unzip(url, args.data_path)
-        # delete the zip file
-        os.remove(data_path + ".zip")
-        print(f"Downloaded and extracted {args.dataset_name} to {data_path}.")
+        os.remove(data_path + ".zip") # delete the zip file
+    
+    os.makedirs(args.output_dir, exist_ok=True)
+    utils.init_logger(args)
+    logger.info(args)
 
     # if the dev qrels doesn't exist, create them with the util 'split_dataset' (80/20 split on the train qrels)
     dev_qrels_path = os.path.join("beir_datasets", args.dataset_name, "qrels/dev.tsv")
     if not os.path.exists(dev_qrels_path):
-        print(f"Dev qrels not found for {args.dataset_name}. Splitting the training qrels into train/dev.")
+        logger.info(f"Dev qrels not found for {args.dataset_name}. Splitting the training qrels into train/dev.")
         train_qrels_path = os.path.join("beir_datasets", args.dataset_name, "qrels/train.tsv")
         split_qrels(train_qrels_path, dev_qrels_path, split_ratio=0.8)
     
@@ -197,8 +205,8 @@ def main(args):
         dataset_name= args.dataset_name,
         target = "train",
         data_path=args.data_path,
-        output_file=f"beir_datasets/{args.dataset_name}/training_data.jsonl",
-        model=model,
+        output_file=os.path.join(args.output_dir, "training_data.jsonl"),
+        model_name=args.model_name,
         num_negatives=args.num_negatives,
         # hard negatives parameters
         num_hard_negatives=args.num_hard_negatives,
@@ -211,7 +219,7 @@ def main(args):
     )
 
     # save the settings used for mining hard negatives
-    with open(f"beir_datasets/{args.dataset_name}/mining_settings.json", "w") as f:
+    with open(os.path.join(args.output_dir, "mining_settings.json"), "w") as f:
         json.dump(vars(args), f)
 
     # dev data
@@ -219,22 +227,12 @@ def main(args):
         dataset_name= args.dataset_name,
         target = "dev",
         data_path=args.data_path,
-        output_file=f"beir_datasets/{args.dataset_name}/dev_data.jsonl",
-        model=None,  # no hard negatives for dev data
+        output_file=os.path.join(args.output_dir, "dev_data.jsonl"),
+        model_name=None,  # no hard negatives for dev data
         num_negatives=args.num_negatives,
         num_hard_negatives=0
     )
     
-    # test data
-    prepare_dataset_with_negatives(
-        dataset_name= args.dataset_name,
-        target = "test",
-        data_path=args.data_path,
-        output_file=f"beir_datasets/{args.dataset_name}/test_data.jsonl",
-        model=None,  # no hard negatives for test data
-        num_negatives=args.num_negatives,
-        num_hard_negatives=0
-    )
 
 if __name__ == "__main__":
 
@@ -253,10 +251,8 @@ if __name__ == "__main__":
     parser.add_argument("--use_faiss", action="store_true", help="Use FAISS for efficient similarity search")
     parser.add_argument("--use_multi_process", action="store_true", help="Use multi-process for mining hard negatives")
     parser.add_argument("--include_docids_and_scores", action="store_true", help="Whether to include document IDs and scores in the output. This will increase the size of the output.")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory. Defaults to beir_datasets/<dataset_name>/<model_id>")
     args, _ = parser.parse_known_args()
-
-    # print the arguments
-    print("Arguments provided: ",args)
 
 
     main(args)

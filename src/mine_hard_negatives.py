@@ -1,26 +1,31 @@
+import faiss
 import numpy as np
 import torch
+import logging
 from sentence_transformers import SentenceTransformer, SimilarityFunction
 from tqdm import tqdm
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, Literal, Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 def mine_hard_negatives(
     queries: Dict[str, Any], 
     corpus: Dict[str, Any], 
     qrels: Dict[str, Dict[str, float]], 
-    model: SentenceTransformer = None,
+    model_name: str,
     range_max: int = 50, 
-    relative_margin: float = None,
+    relative_margin: Optional[float] = None,
     positive_score_to_use: Literal["min", "max", "mean"] = "mean",
     num_hard_negatives: int = 10,
     use_faiss: bool = True,
     batch_size: int = 64,
     use_multi_process: bool = False,
-    target_devices: list[str] = None,
+    target_devices: Optional[list[str]] = None,
     verbose = True,
     include_docids_and_scores: bool = False
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Dict[str, Any]]:
     """
     Mines hard negative samples for a given set of queries and a corpus using a SentenceTransformer model.
     
@@ -41,7 +46,7 @@ def mine_hard_negatives(
         include_docids_and_scores (bool, optional): Whether to include document IDs and similarity scores in the output. Defaults to False.
     
     Returns:
-        List[Dict[str, Any]]: A list of dictionaries, each containing:
+        Dict[str, Dict[str, Any]]: A dictionary where keys are query IDs and values are dictionaries containing:
             - 'qid': Query ID (if include_docids_and_scores is True).
             - 'question': Query text.
             - 'positive_ctxs': List of positive contexts (relevant documents).
@@ -58,6 +63,8 @@ def mine_hard_negatives(
         - Multi-process encoding can be used for faster embedding computation, but requires proper configuration of `target_devices`.
     """
 
+    model = SentenceTransformer(model_name)
+
     if range_max < num_hard_negatives:
         raise ValueError("range_max must be greater than num_hard_negatives.")
 
@@ -71,14 +78,20 @@ def mine_hard_negatives(
     query_ids = list(relevant_queries.keys())
     query_texts = [queries[query_id]["text"] for query_id in query_ids]
 
+    if model_name == 'intfloat/e5-large-v2':
+        # for E5, we need to add 'query:' and 'passage:' to the texts
+        logger.info("Adding 'query:' and 'passage:' to the texts for the E5 model.")
+        query_texts = [f"query: {text}" for text in query_texts]
+        corpus_texts = [f"passage: {text}" for text in corpus_texts]
+
+
     if verbose: # print infos
-        print(f"Using device: {model.device}")
-        print(f"First corpus document -> docid = {corpus_ids[0]} : {corpus_texts[0][:100]}...")
-        print(f"First query -> {query_ids[0]} : {query_texts[0]}")
-        print(f"Removed {len(queries) - len(relevant_queries)} queries without qrels. Remaining queries: {len(relevant_queries)}")
+        logger.info(f"First corpus document -> docid = {corpus_ids[0]} : {corpus_texts[0][:100]}...")
+        logger.info(f"First query -> {query_ids[0]} : {query_texts[0]}")
+        logger.info(f"Removed {len(queries) - len(relevant_queries)} queries without qrels. Remaining queries: {len(relevant_queries)}")
         avg_positives_per_query = np.mean(positives_per_query)
-        print(f"Found an average of {avg_positives_per_query:.3f} positives per query.")        
-        print(f"Found {len(corpus)} documents in the corpus.")
+        logger.info(f"Found an average of {avg_positives_per_query:.3f} positives per query.")        
+        logger.info(f"Found {len(corpus)} documents in the corpus.")
     
     # conversion maps between doc_id and index. will be used since faiss returns indices
     corpus_id_to_index = {doc_id: idx for idx, doc_id in enumerate(corpus_ids)}
@@ -88,8 +101,8 @@ def mine_hard_negatives(
     model.similarity_fn_name = SimilarityFunction.DOT_PRODUCT
 
     # embed the corpus and the queries
-    if use_multi_process: # from SentenceTransformer documentation: first create a pool, then embed documents, finally model.stop_multi_process_pool(pool)
-        print("Using multi-process for encoding.")
+    if use_multi_process and target_devices: # from SentenceTransformer documentation: first create a pool, then embed documents, finally model.stop_multi_process_pool(pool)
+        logger.info("Using multi-process for encoding.")
         pool = model.start_multi_process_pool(
             target_devices=target_devices,
         )
@@ -103,14 +116,14 @@ def mine_hard_negatives(
 
 
     else:
-        print("Using single process for encoding.")
+        logger.info("Using single process for encoding.")
         query_embeddings = model.encode(
             query_texts,
             batch_size=batch_size,
             normalize_embeddings=False,
             convert_to_numpy=True,
             show_progress_bar=True,
-            device=model.device
+            device=str(model.device)
         )
         corpus_embeddings = model.encode(
             corpus_texts,
@@ -118,7 +131,7 @@ def mine_hard_negatives(
             normalize_embeddings=False,
             convert_to_numpy=True,
             show_progress_bar=True,
-            device=model.device
+            device=str(model.device)
         )
 
         query_embeddings = torch.from_numpy(query_embeddings)
@@ -132,7 +145,7 @@ def mine_hard_negatives(
             for doc_id in positive_docids:
                 if doc_id not in corpus_id_to_index:
                     if verbose:
-                        print(f"Warning: doc_id {doc_id} not found in corpus_id_to_index. Skipping.")
+                        logger.info(f"Warning: doc_id {doc_id} not found in corpus_id_to_index. Skipping.")
                     continue
                 score = model.similarity(
                     query_embeddings[query_ids.index(query_id)],
@@ -143,7 +156,7 @@ def mine_hard_negatives(
             
             if not scores:
                 if verbose:
-                    print(f"Warning: No positive scores found for query_id {query_id}. Skipping.")
+                    logger.info(f"Warning: No positive scores found for query_id {query_id}. Skipping.")
                 continue
 
             if positive_score_to_use == "min":
@@ -163,26 +176,24 @@ def mine_hard_negatives(
     if effective_range_max > 2048 and use_faiss:
         effective_range_max = 2048 # faiss gpu can only retrieve up to 2048 documents per query
         if verbose:
-            print("Using FAISS, we can only retrieve up to 2048 documents per query. Setting range_max to 2048.")
+            logger.info("Using FAISS, we can only retrieve up to 2048 documents per query. Setting range_max to 2048.")
     
     k = min(effective_range_max, len(corpus_embeddings))
     if verbose:
-        print(f"Searching for {k} most similar documents per query. This is given by the range_max ({range_max}) parameter + the maximum number of positives per query ({max_positives}).")
+        logger.info(f"Searching for {k} most similar documents per query. This is given by the range_max ({range_max}) parameter + the maximum number of positives per query ({max_positives}).")
 
     if use_faiss:
-        import faiss
-        
         index = faiss.IndexFlatIP(model.get_sentence_embedding_dimension())
         
         # use gpu if available
         try:
-            co = faiss.GpuMultipleClonerOptions()
+            co = faiss.GpuMultipleClonerOptions() # type: ignore
             co.shard = True
             co.useFloat16 = True
             index = faiss.index_cpu_to_all_gpus(index, co=co)
-            print("Using FAISS GPU.")
+            logger.info("Using FAISS GPU.")
         except Exception:
-            print("FAISS GPU not available, using CPU.")
+            logger.info("FAISS GPU not available, using CPU.")
         
         index.add(corpus_embeddings)
         
@@ -231,7 +242,6 @@ def mine_hard_negatives(
 
     for query_idx, query_id in enumerate(tqdm(query_ids, desc="Processing queries", unit="query")):
         positive_docids = set(qrels.get(query_id, {}).keys())
-        # print("Positive docids for this query: ", positive_docids)
         
         margin_positive_score = positive_scores[query_id] if relative_margin else None
         
@@ -245,7 +255,7 @@ def mine_hard_negatives(
             if doc_id not in positive_docids and len(query_hard_negatives) < num_hard_negatives:
 
                 # exclude based on margin
-                if relative_margin is not None and relative_margin > 0.0 and scores[query_idx][score_idx].item() >= ((1-relative_margin) * margin_positive_score):
+                if relative_margin is not None and relative_margin > 0.0 and margin_positive_score is not None and scores[query_idx][score_idx].item() >= ((1-relative_margin) * margin_positive_score):
                     skipped_because_of_relative_margin += 1
                     continue
                 
@@ -253,7 +263,7 @@ def mine_hard_negatives(
                 # check if the document is already in query_hard_negatives (might happen if the corpus has duplicates)
                 if corpus[doc_id]['title'] in [d['title'] for d in query_hard_negatives]:
                     if verbose:
-                        print(f"Warning: Document {doc_id} already in query_hard_negatives. Skipping.")
+                        logger.info(f"Warning: Document {doc_id} already in query_hard_negatives (probably a duplicate, check your corpus). Skipping.")
                     continue
 
                 # include the document in the hard_negatives
@@ -272,7 +282,7 @@ def mine_hard_negatives(
         for doc_id in positive_docids:
             if doc_id not in corpus:
                 if verbose:
-                    print(f"Warning: positive doc_id {doc_id} not found in corpus. Skipping.")
+                    logger.info(f"Warning: positive doc_id {doc_id} not found in corpus. Skipping.")
                 continue
             positive_context = {}
             if include_docids_and_scores:
@@ -299,9 +309,9 @@ def mine_hard_negatives(
         final_queries[query_id] = entry
 
     if verbose:
-        print(f"Found {num_queries_with_hard_negatives} queries with hard negatives. This is the {num_queries_with_hard_negatives / len(relevant_queries) * 100:.2f}% of the queries.")
-        print(f"Found {actual_hard_negatives} hard negatives, so there's a mean of {actual_hard_negatives / len(final_queries):.2f} hard negatives per query.")
+        logger.info(f"Found {num_queries_with_hard_negatives} queries with hard negatives. This is the {num_queries_with_hard_negatives / len(relevant_queries) * 100:.2f}% of the queries.")
+        logger.info(f"Found {actual_hard_negatives} hard negatives, so there's a mean of {actual_hard_negatives / len(final_queries):.2f} hard negatives per query.")
         if relative_margin is not None:
-            print(f"Excluding {skipped_because_of_relative_margin} potential negatives based on relative margin ({positive_score_to_use}).")
-
+            logger.info(f"Excluding {skipped_because_of_relative_margin} potential negatives based on relative margin ({positive_score_to_use}).")
+            
     return final_queries

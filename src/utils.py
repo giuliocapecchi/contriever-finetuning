@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 def init_logger(args, stdout_only=False):
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+        handler.close()
+    
     if torch.distributed.is_initialized():
         torch.distributed.barrier()
     stdout_handler = logging.StreamHandler(sys.stdout)
