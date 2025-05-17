@@ -34,20 +34,56 @@
 # score_function: Scoring function to use (e.g., dot, cos_sim).
 
 
-DATASET=hotpotqa # dataset in BEIR format, e.g. nfcorpus, hotpotqa, scifact, etc.
-MODEL_PATH=intfloat/e5-large-v2 # e.g., facebook/contriever-msmarco, intfloat/e5-large-v2, sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco, ...
+DATASET=DATASET_NAME_HERE # dataset in BEIR format, e.g. nfcorpus, hotpotqa, scifact, etc.
+MODEL_PATH=MODEL_NAME_HERE # e.g., facebook/contriever-msmarco, intfloat/e5-large-v2, sebastian-hofstaetter/distilbert-dot-tas_b-b256-msmarco, ...
 MODEL_ID=${MODEL_PATH##*/}
+
+if [[ "$MODEL_ID" == "contriever-msmarco" ]]; then
+    LORA_TARGET_MODULES="query key value output.dense intermediate.dense"
+    SCORE_FUNCTION="dot"
+    NORM_QUERY=""
+    NORM_DOC=""
+    POOLING="average"
+    
+elif [[ "$MODEL_ID" == "e5-large-v2" ]]; then
+    LORA_TARGET_MODULES="query key value output.dense intermediate.dense"
+    SCORE_FUNCTION="cos_sim"
+    NORM_QUERY="--norm_query"
+    NORM_DOC="--norm_doc"
+    POOLING="average"
+    
+elif [[ "$MODEL_ID" == "distilbert-dot-tas_b-b256-msmarco" ]]; then
+    LORA_TARGET_MODULES="q_lin k_lin v_lin out_lin lin1 lin2"
+    SCORE_FUNCTION="dot"
+    NORM_QUERY=""
+    NORM_DOC=""
+    POOLING="cls"
+    MODEL_ID="msmarco-distilbert-base-tas-b"
+    
+else
+    SCORE_FUNCTION="dot"
+    NORM_QUERY=""
+    NORM_DOC=""
+    POOLING="average"
+fi
+
+if [[ "$DATASET" == "hotpotqa" || "$DATASET" == "nq-train" || "$DATASET" == "fever" ]]; then
+    USE_MINICORPUS="--use_minicorpus"
+else
+    USE_MINICORPUS=""
+fi
+
 TRAIN_DATA=./beir_datasets/$DATASET/$MODEL_ID/training_data.jsonl
 EVAL_DATA=./beir_datasets/$DATASET/$MODEL_ID/dev_data.jsonl
 TOTAL_STEPS=5000
 SCHEDULER=cosine
-WARMUP_STEPS=$(($TOTAL_STEPS / 1000))
+WARMUP_STEPS=$(($TOTAL_STEPS / 10))
 SAVE_FREQ=2500
 LOG_FREQ=10
 EVAL_FREQ=200
 LR=0.00005
-PER_GPU_BATCH_SIZE=16
-ACCUMULATION_STEPS=4 # they used 64 as batchsize
+PER_GPU_BATCH_SIZE=32
+ACCUMULATION_STEPS=2 # they used 64 as batchsize
 NEGATIVE_CTXS=4
 NEGATIVE_HARD_RATIO=1
 NEGATIVE_HARD_MIN_IDX=0
@@ -55,22 +91,11 @@ TEMPERATURE=0.05
 CHUNK_LENGTH=256
 LABEL_SMOOTHING=0.1
 
-if [[ "$MODEL_ID" == "e5-large-v2" ]]; then
-    SCORE_FUNCTION="cos_sim"
-    NORM_QUERY="--norm_query"
-    NORM_DOC="--norm_doc"
-else
-    SCORE_FUNCTION="dot"
-    NORM_QUERY=""
-    NORM_DOC=""
-fi
-
 
 # LoRA parameters
 LORA_R=16
 LORA_ALPHA=32
 LORA_DROPOUT=0.1
-LORA_TARGET_MODULES="query key value output.dense intermediate.dense"
 INIT_LORA_WEIGHTS=pissa
 
 
@@ -99,6 +124,7 @@ python ./finetuning.py \
 --negative_ctxs $NEGATIVE_CTXS \
 --negative_hard_ratio $NEGATIVE_HARD_RATIO \
 --negative_hard_min_idx $NEGATIVE_HARD_MIN_IDX \
+--pooling $POOLING \
 --score_function $SCORE_FUNCTION \
 $NORM_QUERY \
 $NORM_DOC \
@@ -111,7 +137,7 @@ $NORM_DOC \
 --use_rslora \
 --eval_datasets $DATASET \
 --eval_split dev \
---use_minicorpus
+$USE_MINICORPUS
 
 
 else # if 'LORA_R' is not defined, finetune the model without LoRA
@@ -142,11 +168,12 @@ python ./finetuning.py \
 --negative_ctxs $NEGATIVE_CTXS \
 --negative_hard_ratio $NEGATIVE_HARD_RATIO \
 --negative_hard_min_idx $NEGATIVE_HARD_MIN_IDX \
+--pooling $POOLING \
 --score_function $SCORE_FUNCTION \
 $NORM_QUERY \
 $NORM_DOC \
 --eval_datasets $DATASET \
 --eval_split dev \
---use_minicorpus
+$USE_MINICORPUS
 
 fi

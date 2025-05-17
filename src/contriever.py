@@ -101,7 +101,7 @@ class XLMRetriever(XLMRobertaModel):
         return emb
     
 
-class E5Retriever(torch.nn.Module):
+class GenericRetriever(torch.nn.Module):
     def __init__(self, model_name_or_path, pooling="average"):
         super().__init__()
         self.model = AutoModel.from_pretrained(model_name_or_path)
@@ -111,14 +111,17 @@ class E5Retriever(torch.nn.Module):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         last_hidden = outputs.last_hidden_state
         last_hidden = last_hidden.masked_fill(~attention_mask[..., None].bool(), 0.0)
+        
         if self.pooling == "average":
             emb = last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
         elif self.pooling == "cls":
             emb = last_hidden[:, 0]
+        else:
+            raise ValueError(f"Unsupported pooling method: {self.pooling}")
+        
         if normalize:
             emb = torch.nn.functional.normalize(emb, dim=-1)
         return emb
-
 
 
 def load_retriever(model_path, pooling="average", random_init=False):
@@ -155,8 +158,8 @@ def load_retriever(model_path, pooling="average", random_init=False):
         tokenizer = utils.load_hf(transformers.AutoTokenizer, retriever_model_id)
         cfg = utils.load_hf(transformers.AutoConfig, retriever_model_id)
 
-        if "e5" in retriever_model_id.lower():
-            model_class = E5Retriever
+        if "tas" in retriever_model_id.lower() or "e5" in retriever_model_id.lower():
+            model_class = GenericRetriever
         elif "xlm" in retriever_model_id.lower():
             model_class = XLMRetriever
         else:
@@ -172,8 +175,8 @@ def load_retriever(model_path, pooling="average", random_init=False):
         retriever.load_state_dict(pretrained_dict, strict=False)
     else:
         retriever_model_id = model_path
-        if "e5" in retriever_model_id.lower():
-            model_class = E5Retriever
+        if "tas" in retriever_model_id.lower() or "e5" in retriever_model_id.lower():
+            model_class = GenericRetriever
         elif "xlm" in retriever_model_id.lower():
             model_class = XLMRetriever
         else:
@@ -181,8 +184,8 @@ def load_retriever(model_path, pooling="average", random_init=False):
 
         cfg = utils.load_hf(transformers.AutoConfig, model_path)
         tokenizer = utils.load_hf(transformers.AutoTokenizer, model_path)
-        if model_class is E5Retriever:
-            retriever = E5Retriever(model_path, pooling=pooling)
+        if model_class is GenericRetriever:
+            retriever = model_class(model_path, pooling=pooling)
         else:
             retriever = utils.load_hf(model_class, model_path)
 

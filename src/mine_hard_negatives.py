@@ -262,7 +262,7 @@ def mine_hard_negatives(
                 
 
                 # check if the document is already in query_hard_negatives (might happen if the corpus has duplicates)
-                if corpus[doc_id]['title'] in [d['title'] for d in query_hard_negatives]:
+                if corpus[doc_id]['title'] != "" and corpus[doc_id]['title'] in [d['title'] for d in query_hard_negatives]:
                     if verbose:
                         logger.info(f"Warning: Document {doc_id} already in query_hard_negatives (probably a duplicate, check your corpus). Skipping.")
                     continue
@@ -311,7 +311,7 @@ def mine_hard_negatives(
 
     if verbose:
         logger.info(f"Found {num_queries_with_hard_negatives} queries with hard negatives. This is the {num_queries_with_hard_negatives / len(relevant_queries) * 100:.2f}% of the queries.")
-        logger.info(f"Found {actual_hard_negatives} hard negatives, so there's a mean of {actual_hard_negatives / len(final_queries):.2f} hard negatives per query.")
+        logger.info(f"Found {actual_hard_negatives} hard negatives, so there's a mean of {actual_hard_negatives / num_queries_with_hard_negatives:.2f} hard negatives per query (that inlcludes them).")
         if relative_margin is not None:
             logger.info(f"Excluding {skipped_because_of_relative_margin} potential negatives based on relative margin ({positive_score_to_use}).")
             
