@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 def main(args):
 
     logger = src.utils.init_logger(args)
-    model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path)
+    logger.info(args)
+    
+    model, tokenizer, _ = src.contriever.load_retriever(args.model_name_or_path, args.pooling)
     
     # load LoRA module
     if args.lora_adapter_path is not None and args.finetuned_basemodel_checkpoint is None:
@@ -107,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--per_gpu_batch_size", default=128, type=int, help="Batch size per GPU/CPU for indexing.")
     parser.add_argument("--output_dir", type=str, default="./my_experiment", help="Output directory")
     parser.add_argument("--model_name_or_path", type=str, help="Model name or path")
+    parser.add_argument("--pooling", type=str, default="average", help="Pooling method for the model")
     parser.add_argument(
         "--score_function", type=str, default="dot", help="Metric used to compute similarity between two embeddings"
     )
