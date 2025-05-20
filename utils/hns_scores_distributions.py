@@ -79,7 +79,7 @@ def main():
         neg_texts = [n["title"] + " " + n["text"] for n in ex["negative_ctxs"]]
         hard_texts = [h["title"] + " " + h["text"] for h in ex["hard_negative_ctxs"]]
 
-        if args.model_name == "intfloat/e5-large-v2": # add 'query:' and 'passage:' prefixes
+        if 'e5' in args.model_name: # add 'query:' and 'passage:' prefixes
             query = "query: " + query
             pos_texts = ["passage: " + text for text in pos_texts]
             neg_texts = ["passage: " + text for text in neg_texts]

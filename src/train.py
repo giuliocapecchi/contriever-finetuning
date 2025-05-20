@@ -133,6 +133,7 @@ def eval_model(opt, query_encoder, doc_encoder, tokenizer, tb_logger, step):
             score_function=opt.score_function,
             lower_case=opt.lower_case,
             normalize_text=opt.eval_normalize_text,
+            prefix_type=opt.prefix_type,
         )
 
         message = ["[EVAL]"]

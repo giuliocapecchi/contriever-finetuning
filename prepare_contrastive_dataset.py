@@ -1,6 +1,5 @@
 import json
 import random
-from sentence_transformers import SentenceTransformer
 import os
 import beir.util
 import argparse
@@ -68,6 +67,8 @@ def prepare_dataset_with_negatives(
     include_docids_and_scores: bool = False,
     # hard negatives parameters
     model_name: Optional[str] = None,
+    normalize_embeddings: bool = False,
+    prefix_type: Optional[str] = None,
     num_hard_negatives: Optional[int] = None,
     relative_margin: Optional[float] = None,
     use_faiss: bool = True,
@@ -113,7 +114,8 @@ def prepare_dataset_with_negatives(
             use_faiss=use_faiss,
             batch_size=batch_size,
             use_multi_process=use_multi_process,
-            normalize_embeddings=True if model_name=="intfloat/e5-large-v2" else False,
+            normalize_embeddings=normalize_embeddings,
+            prefix_type=prefix_type,
             include_docids_and_scores=include_docids_and_scores,
         )
 
@@ -212,6 +214,8 @@ def main(args):
         # hard negatives parameters
         num_hard_negatives=args.num_hard_negatives,
         relative_margin=args.relative_margin,
+        prefix_type=args.prefix_type,
+        normalize_embeddings=args.normalize_embeddings,
         range_max=args.range_max,
         batch_size=args.batch_size,
         use_faiss=args.use_faiss,
@@ -250,10 +254,14 @@ if __name__ == "__main__":
     parser.add_argument("--range_max", type=int, help="Maximum rank of the closest matches to consider as negatives", default=None)
     parser.add_argument("--batch_size", type=int, help="Batch size for mining hard negatives", default=32)
     parser.add_argument("--use_faiss", action="store_true", help="Use FAISS for efficient similarity search")
+    parser.add_argument("--prefix_type", type=str, default="none", help="Prefix type for the model. Pass 'query_or_passage' for the E5 model family.")
+    parser.add_argument("--normalize_embeddings", action="store_true", help="Whether to normalize the embeddings before computing similarity")
     parser.add_argument("--use_multi_process", action="store_true", help="Use multi-process for mining hard negatives")
     parser.add_argument("--include_docids_and_scores", action="store_true", help="Whether to include document IDs and scores in the output. This will increase the size of the output.")
     parser.add_argument("--output_dir", type=str, default=None, help="Output directory. Defaults to beir_datasets/<dataset_name>/<model_id>")
     args, _ = parser.parse_known_args()
-
+    
+    if args.prefix_type == "none":
+        args.prefix_type = None
 
     main(args)

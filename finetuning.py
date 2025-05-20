@@ -77,10 +77,10 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step, trial=None):
 
     # load the training data
     train_dataset = finetuning_data.Dataset(
-        model_name=opt.model_path,
         datapaths=opt.train_data,
         negative_ctxs=opt.negative_ctxs,
         training=True,
+        prefix_type=opt.prefix_type,
         negative_hard_ratio=opt.negative_hard_ratio,
         negative_hard_min_idx=opt.negative_hard_min_idx, 
         global_rank=dist_utils.get_rank(),
@@ -198,7 +198,7 @@ def finetuning(opt, model, optimizer, scheduler, tokenizer, step, trial=None):
                         logger.info(f"[EARLY STOPPING] New best metric ({opt.early_stopping_metric}): {best_score} at step {best_step}")
                     else:
                         patience_counter += 1
-                        logger.info(f"{opt.early_stopping_metric} did not improve ({new_score} < {best_score}). Patience counter: {patience_counter}/{opt.early_stopping_patience}")
+                        logger.info(f"{opt.early_stopping_metric} did not improve ({new_score} < {best_score} + {opt.early_stopping_delta}). Patience counter: {patience_counter}/{opt.early_stopping_patience} (Best step: {best_step})")
                         if patience_counter >= opt.early_stopping_patience:
                             logger.info(f"Early stopping at step {step}. Best {opt.early_stopping_metric}: {best_score}, from step: {best_step})")
                             return best_step, best_score
@@ -218,13 +218,13 @@ def evaluate(opt, model, tokenizer, tb_logger, step):
     """ Evaluate the model on the validation data"""
     # first load the evaluation data
     dataset = finetuning_data.Dataset(
-        model_name=opt.model_path,
         datapaths=opt.eval_data,
         normalize=opt.eval_normalize_text,
         global_rank=dist_utils.get_rank(),
         world_size=dist_utils.get_world_size(),
         maxload=opt.maxload,
         training=False,
+        prefix_type=opt.prefix_type,
     )
 
     collator = finetuning_data.Collator(tokenizer, passage_maxlength=opt.chunk_length)

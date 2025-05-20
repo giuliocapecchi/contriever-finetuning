@@ -19,6 +19,7 @@ def mine_hard_negatives(
     relative_margin: Optional[float] = None,
     positive_score_to_use: Literal["min", "max", "mean"] = "mean",
     num_hard_negatives: int = 10,
+    prefix_type: Optional[str] = None,
     use_faiss: bool = True,
     batch_size: int = 64,
     use_multi_process: bool = False,
@@ -79,12 +80,13 @@ def mine_hard_negatives(
     query_ids = list(relevant_queries.keys())
     query_texts = [queries[query_id]["text"] for query_id in query_ids]
 
-    if model_name == 'intfloat/e5-large-v2':
-        # for E5, we need to add 'query:' and 'passage:' to the texts
+    if prefix_type == "query_or_passage":
+        # for the E5 model family, we need to add 'query:' and 'passage:' to the texts
         logger.info("Adding 'query:' and 'passage:' to the texts for the E5 model.")
         query_texts = [f"query: {text}" for text in query_texts]
         corpus_texts = [f"passage: {text}" for text in corpus_texts]
-
+    elif prefix_type is not None:
+        raise ValueError(f"Unsupported prefix type: {prefix_type}. Supported types are None and 'query_or_passage'.")
 
     if verbose: # print infos
         logger.info(f"First corpus document -> docid = {corpus_ids[0]} : {corpus_texts[0][:100]}...")

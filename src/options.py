@@ -51,6 +51,7 @@ class Options:
         self.parser.add_argument("--score_function", type=str, default="dot")
         self.parser.add_argument("--retriever_model_id", type=str, default="bert-base-uncased")
         self.parser.add_argument("--pooling", type=str, default="average")
+        self.parser.add_argument("--prefix_type", type=str, default="none", help="Prefix type for the model. Pass 'query_or_passage' for the E5 model family.")
         self.parser.add_argument("--random_init", action="store_true", help="init model with random weights")
 
         # dataset parameters
@@ -129,5 +130,6 @@ class Options:
 
     def parse(self):
         opt, _ = self.parser.parse_known_args()
-        # opt = self.parser.parse_args()
+        if opt.prefix_type == "none":
+            opt.prefix_type = None
         return opt

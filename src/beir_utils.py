@@ -144,6 +144,7 @@ def evaluate_model(
     lower_case=False,
     normalize_text=False,
     save_perquery_scores=False,
+    prefix_type=None,
 ):
 
     metrics = defaultdict(list)  # store final results
@@ -182,6 +183,17 @@ def evaluate_model(
 
     if not dataset == "cqadupstack":
         corpus, queries, qrels = GenericDataLoader(data_folder=data_path, corpus_file="minicorpus.jsonl" if use_minicorpus else "corpus.jsonl").load(split=split)
+        
+        if prefix_type == 'query_or_passage': # necessary for the E5 model family 
+            # prepend 'query:' to queries and 'passage:' to corpus
+            queries = {k: f"query: {v}" for k, v in queries.items()}
+            for _, doc in corpus.items():
+                doc['title'] = f"passage: {doc['title']}" if doc.get('title', '') else ''
+            print("First queries:", list(queries.values())[:1])
+            print("First corpus:", list(corpus.values())[:1])
+        elif prefix_type is not None:
+            raise ValueError(f"Unsupported prefix type: {prefix_type}. Supported types are None and 'query_or_passage'.")
+
         results = retriever.retrieve(corpus, queries)
 
         if save_perquery_scores and is_main:

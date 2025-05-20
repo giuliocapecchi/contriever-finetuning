@@ -17,9 +17,6 @@ import src.dist_utils
 import src.contriever
 from peft import PeftModel
 
-from src import inbatch
-from src.options import Options
-
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +73,7 @@ def main(args):
         lower_case=args.lower_case,
         normalize_text=args.normalize_text,
         save_perquery_scores=True,
+        prefix_type=args.prefix_type
     )
 
     if src.dist_utils.is_main():
@@ -110,22 +108,20 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="./my_experiment", help="Output directory")
     parser.add_argument("--model_name_or_path", type=str, help="Model name or path")
     parser.add_argument("--pooling", type=str, default="average", help="Pooling method for the model")
-    parser.add_argument(
-        "--score_function", type=str, default="dot", help="Metric used to compute similarity between two embeddings"
-    )
+    parser.add_argument("--score_function", type=str, default="dot", help="Metric used to compute similarity between two embeddings")
     parser.add_argument("--norm_query", action="store_true", help="Normalize query representation")
     parser.add_argument("--norm_doc", action="store_true", help="Normalize document representation")
+    parser.add_argument("--prefix_type", type=str, default="none", help="Prefix type for the model (should be equal to 'query_or_passage' for the E5 model family)")
     parser.add_argument("--lower_case", action="store_true", help="lowercase query and document text")
-    parser.add_argument(
-        "--normalize_text", action="store_true", help="Apply function to normalize some common characters"
-    )
+    parser.add_argument("--normalize_text", action="store_true", help="Apply function to normalize some common characters")
     parser.add_argument("--save_results_path", type=str, default=None, help="Path to save the results of the evaluation (in a txt file)")
 
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-    # parser.add_argument("--main_port", type=int, default=-1, help="Main port (for multi-node SLURM jobs)")
 
     parser.add_argument("--lora_adapter_path", type=str, default=None, help="Path to LoRA module")
     parser.add_argument("--finetuned_basemodel_checkpoint", type=str, default=None, help="Path to base model checkpoint")
 
     args, _ = parser.parse_known_args()
+    if args.prefix_type == "none":
+        args.prefix_type = None
     main(args)
