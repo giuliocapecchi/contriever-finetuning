@@ -12,6 +12,14 @@ MODEL_ID=${MODEL_NAME_OR_PATH##*/}
 DATASET=DATASET_NAME_HERE # dataset in BEIR format, e.g. nfcorpus, hotpotqa, scifact, etc.
 BEIR_DIR=beir_datasets
 
+USE_RERANKER=--use_reranker
+RERANKER_MODEL_NAME="BAAI/bge-reranker-base" # e.g. BAAI/bge-reranker-base, cross-encoder/ms-marco-electra-base
+
+# Path to a folder containing a LoRA adapter (optional)
+LORA_ADAPTER_PATH=beir_results/contriever-base-msmarco/scifact/lora_experiment_0520-1006/lora_step-800 #
+# Path to a folder containing a checkpoint of a fine-tuned model (optional)
+FINETUNED_BASEMODEL_CHECKPOINT=beir_results/contriever-base-msmarco/scifact/finetuned_basemodel_experiment_0520-1209/checkpoint/step-600
+
 
 if [[ "$MODEL_ID" == "contriever-msmarco" ]]; then
     LORA_TARGET_MODULES="query key value output.dense intermediate.dense"
@@ -19,6 +27,7 @@ if [[ "$MODEL_ID" == "contriever-msmarco" ]]; then
     NORM_QUERY=""
     NORM_DOC=""
     POOLING="average"
+    MODEL_ID="contriever-base-msmarco"
     PREFIX_TYPE="none"
     
 elif [[ "$MODEL_ID" == "e5-base-v2" || "$MODEL_ID" == "e5-large-v2" ]]; then
@@ -45,11 +54,6 @@ else
     POOLING="average"
 fi
 
-# LoRA parameters (optional)
-LORA_ADAPTER_PATH=LORA_ADAPTER_PATH_HERE # path to a folder containing a LoRA adapter
-# Finetuned model path (optional)
-FINETUNED_BASEMODEL_CHECKPOINT=FINETUNED_BASEMODEL_CHECKPOINT_HERE # path to a folder containing a checkpoint of a fine-tuned model
-
 save_results_path=./beir_results/${MODEL_ID}/${DATASET}/zero-shot-evaluation
 PER_GPU_BATCH_SIZE=128
 
@@ -59,7 +63,7 @@ PER_GPU_BATCH_SIZE=128
 if [[ ! -d "${save_results_path}" ]]; then # if the base-model evaluation folder does not exist, perform the evaluation
     echo "Evaluating basemodel"
     mkdir -p $save_results_path
-    python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --score_function $SCORE_FUNCTION --pooling $POOLING $NORM_QUERY $NORM_DOC --prefix_type $PREFIX_TYPE --beir_dir $BEIR_DIR --save_results_path $save_results_path --output_dir $save_results_path --per_gpu_batch_size $PER_GPU_BATCH_SIZE
+    python eval_beir.py --model_name_or_path $MODEL_NAME_OR_PATH --dataset $DATASET --score_function $SCORE_FUNCTION --pooling $POOLING $NORM_QUERY $NORM_DOC --prefix_type $PREFIX_TYPE --beir_dir $BEIR_DIR --save_results_path $save_results_path --output_dir $save_results_path --per_gpu_batch_size $PER_GPU_BATCH_SIZE $USE_RERANKER --reranker_model_name $RERANKER_MODEL_NAME
 else
     echo "Base model evaluation already performed and saved in ${save_results_path}/metrics.txt"
 fi
@@ -79,7 +83,9 @@ if [[ -n "${LORA_ADAPTER_PATH}" ]]; then # if 'LORA_ADAPTER_PATH' is defined, ev
         --lora_adapter_path $LORA_ADAPTER_PATH \
         --save_results_path $LORA_ADAPTER_PATH \
         --output_dir $LORA_ADAPTER_PATH \
-        --per_gpu_batch_size $PER_GPU_BATCH_SIZE
+        --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
+        $USE_RERANKER \
+        --reranker_model_name $RERANKER_MODEL_NAME
 
     # Update LORA_ADAPTER_PATH to include the wildcard
     LORA_ADAPTER_PATH=$(echo $LORA_ADAPTER_PATH | awk -F'/' '{OFS="/"; $NF="*" $NF; print}')
@@ -107,7 +113,9 @@ if [[ -n "${FINETUNED_BASEMODEL_CHECKPOINT}" ]]; then # if 'FINETUNED_BASEMODEL_
         --finetuned_basemodel_checkpoint $FINETUNED_BASEMODEL_CHECKPOINT \
         --save_results_path $FINETUNED_BASEMODEL_CHECKPOINT \
         --output_dir $FINETUNED_BASEMODEL_CHECKPOINT \
-        --per_gpu_batch_size $PER_GPU_BATCH_SIZE
+        --per_gpu_batch_size $PER_GPU_BATCH_SIZE \
+        $USE_RERANKER \
+        --reranker_model_name $RERANKER_MODEL_NAME
     
     # Update FINETUNED_BASEMODEL_CHECKPOINT to include the wildcard
     FINETUNED_BASEMODEL_CHECKPOINT=$(echo $FINETUNED_BASEMODEL_CHECKPOINT | awk -F'/' '{OFS="/"; $NF="*" $NF; print}')

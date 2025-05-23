@@ -9,7 +9,6 @@ import torch
 import logging
 import os
 
-# import src.slurm
 import src.contriever
 import src.beir_utils
 import src.utils
@@ -73,7 +72,9 @@ def main(args):
         lower_case=args.lower_case,
         normalize_text=args.normalize_text,
         save_perquery_scores=True,
-        prefix_type=args.prefix_type
+        prefix_type=args.prefix_type, 
+        use_reranker=args.use_reranker,
+        reranker_model_name=args.reranker_model_name
     )
 
     if src.dist_utils.is_main():
@@ -120,6 +121,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--lora_adapter_path", type=str, default=None, help="Path to LoRA module")
     parser.add_argument("--finetuned_basemodel_checkpoint", type=str, default=None, help="Path to base model checkpoint")
+
+    parser.add_argument("--use_reranker", action="store_true", help="Whether to rerank the results")
+    parser.add_argument("--reranker_model_name", type=str, default="BAAI/bge-reranker-base", help="Reranker model name or path")
 
     args, _ = parser.parse_known_args()
     if args.prefix_type == "none":
